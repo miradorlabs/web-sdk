@@ -25,9 +25,7 @@ export default [
       }),
     ],
     external: [
-      'google-protobuf',
-      'mirador-gateway-parallax-web',
-      /^mirador-gateway-parallax-web\/.*/,
+      // Keep these as peer dependencies - users should provide them
       'rxjs',
       /^rxjs\/.*/,
     ],
@@ -41,9 +39,6 @@ export default [
       name: 'ParallaxWeb',
       sourcemap: true,
       globals: {
-        'google-protobuf': 'googleProtobuf',
-        'mirador-gateway-parallax-web': 'miradorGatewayParallaxWeb',
-        'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway': 'miradorGatewayParallaxWeb.parallaxGateway',
         'rxjs': 'rxjs',
       },
     },
@@ -60,9 +55,7 @@ export default [
       }),
     ],
     external: [
-      'google-protobuf',
-      'mirador-gateway-parallax-web',
-      /^mirador-gateway-parallax-web\/.*/,
+      // Keep rxjs as external - it's commonly provided
       'rxjs',
       /^rxjs\/.*/,
     ],
@@ -76,9 +69,6 @@ export default [
     },
     plugins: [dts()],
     external: [
-      'google-protobuf',
-      'mirador-gateway-parallax-web',
-      /^mirador-gateway-parallax-web\/.*/,
       'rxjs',
       /^rxjs\/.*/,
     ],
