@@ -44,7 +44,7 @@
     "typescript-eslint": "^8.47.0"
   },
   "dependencies": {
-    "google-protobuf": "^4.0.1",
+    "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
     "mirador-gateway-parallax-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/parallax/grpc-web/mirador-gateway-parallax-grpc-web-1.0.9.tgz",
     "rxjs": "^7.8.2"
