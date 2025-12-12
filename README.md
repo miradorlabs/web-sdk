@@ -13,7 +13,7 @@ npm install @miradorlabs/parallax-web
 ### Basic Setup
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import { ParallaxClient, CreateTraceRequest } from '@miradorlabs/parallax-web';
 
 // Initialize the client with your API key
 const client = new ParallaxClient('your-api-key');
@@ -25,133 +25,160 @@ const client = new ParallaxClient('your-api-key', 'https://your-gateway.example.
 ### Creating a Trace
 
 ```typescript
-const traceResponse = await client.createTrace({
-  name: 'My Application Trace',
-  attributes: {
-    'project.id': 'my-project',
-    'environment': 'production',
-  },
-  tags: ['web', 'user-action'],
-});
+import { CreateTraceRequest } from '@miradorlabs/parallax-web';
 
-const traceId = traceResponse.traceId;
+const request = new CreateTraceRequest();
+request.setName('My Application Trace');
+
+// Set attributes using the map
+const attributesMap = request.getAttributesMap();
+attributesMap.set('project.id', 'my-project');
+attributesMap.set('environment', 'production');
+
+request.setTagsList(['web', 'user-action']);
+
+const traceResponse = await client.createTrace(request);
+const traceId = traceResponse.getTraceId();
 ```
 
 ### Starting a Span
 
 ```typescript
-const spanResponse = await client.startSpan({
-  name: 'User Login',
-  traceId: traceId,
-  attributes: {
-    'user.id': 'user-123',
-    'action': 'login',
-  },
-});
+import { StartSpanRequest } from '@miradorlabs/parallax-web';
 
-const spanId = spanResponse.spanId;
-```
+const request = new StartSpanRequest();
+request.setName('User Login');
+request.setTraceId(traceId);
 
-### Adding Span Attributes
+// Set attributes using the map
+const attributesMap = request.getAttributesMap();
+attributesMap.set('user.id', 'user-123');
+attributesMap.set('action', 'login');
 
-```typescript
-await client.addSpanAttributes({
-  traceId: traceId,
-  spanId: spanId,
-  attributes: {
-    'response.status': '200',
-    'response.time': '145ms',
-  },
-});
+const spanResponse = await client.startSpan(request);
+const spanId = spanResponse.getSpanId();
 ```
 
 ### Adding Span Events
 
 ```typescript
-await client.addSpanEvent({
-  traceId: traceId,
-  spanId: spanId,
-  eventName: 'User Authenticated',
-  attributes: {
-    'auth.method': 'oauth',
-    'auth.provider': 'google',
-  },
-});
+import { AddSpanEventRequest } from '@miradorlabs/parallax-web';
+
+const request = new AddSpanEventRequest();
+request.setTraceId(traceId);
+request.setSpanId(spanId);
+request.setEventName('User Authenticated');
+
+const attributesMap = request.getAttributesMap();
+attributesMap.set('auth.method', 'oauth');
+attributesMap.set('auth.provider', 'google');
+
+await client.addSpanEvent(request);
 ```
 
 ### Adding Span Errors
 
 ```typescript
-await client.addSpanError({
-  traceId: traceId,
-  spanId: spanId,
-  errorType: 'ValidationError',
-  message: 'Invalid email format',
-  stackTrace: error.stack,
-  attributes: {
-    'error.field': 'email',
-  },
-});
+import { AddSpanErrorRequest } from '@miradorlabs/parallax-web';
+
+const request = new AddSpanErrorRequest();
+request.setTraceId(traceId);
+request.setSpanId(spanId);
+request.setErrorType('ValidationError');
+request.setMessage('Invalid email format');
+request.setStackTrace(error.stack);
+
+const attributesMap = request.getAttributesMap();
+attributesMap.set('error.field', 'email');
+
+await client.addSpanError(request);
 ```
 
 ### Adding Span Hints (Blockchain Transactions)
 
 ```typescript
-await client.addSpanHint({
-  traceId: traceId,
-  parentSpanId: spanId,
-  chainTransaction: {
-    txHash: '0x1234567890abcdef',
-    chainId: 1, // Ethereum mainnet
-  },
-});
+import { AddSpanHintRequest } from '@miradorlabs/parallax-web';
+
+const chainTx = new AddSpanHintRequest.ChainTransaction();
+chainTx.setTxHash('0x1234567890abcdef');
+chainTx.setChainId(1); // Ethereum mainnet
+
+const request = new AddSpanHintRequest();
+request.setTraceId(traceId);
+request.setParentSpanId(spanId);
+request.setChainTransaction(chainTx);
+
+await client.addSpanHint(request);
 ```
 
 ### Finishing a Span
 
 ```typescript
-await client.finishSpan({
-  traceId: traceId,
-  spanId: spanId,
-});
+import { FinishSpanRequest } from '@miradorlabs/parallax-web';
+
+const spanStatus = new FinishSpanRequest.SpanStatus();
+spanStatus.setCode(FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_OK);
+
+const request = new FinishSpanRequest();
+request.setTraceId(traceId);
+request.setSpanId(spanId);
+request.setStatus(spanStatus);
+
+await client.finishSpan(request);
 ```
 
 ## Complete Example
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import {
+  ParallaxClient,
+  CreateTraceRequest,
+  StartSpanRequest,
+  AddSpanEventRequest,
+  FinishSpanRequest,
+} from '@miradorlabs/parallax-web';
 
 async function trackUserAction() {
   const client = new ParallaxClient('your-api-key');
 
   try {
     // Create trace
-    const { traceId } = await client.createTrace({
-      name: 'User Purchase Flow',
-      attributes: { 'user.id': 'user-123' },
-      tags: ['purchase', 'web'],
-    });
+    const createTraceReq = new CreateTraceRequest();
+    createTraceReq.setName('User Purchase Flow');
+    createTraceReq.getAttributesMap().set('user.id', 'user-123');
+    createTraceReq.setTagsList(['purchase', 'web']);
+
+    const traceResponse = await client.createTrace(createTraceReq);
+    const traceId = traceResponse.getTraceId();
 
     // Start span
-    const { spanId } = await client.startSpan({
-      name: 'Checkout Process',
-      traceId: traceId,
-      attributes: { 'cart.items': '3' },
-    });
+    const startSpanReq = new StartSpanRequest();
+    startSpanReq.setName('Checkout Process');
+    startSpanReq.setTraceId(traceId);
+    startSpanReq.getAttributesMap().set('cart.items', '3');
+
+    const spanResponse = await client.startSpan(startSpanReq);
+    const spanId = spanResponse.getSpanId();
 
     // Add event
-    await client.addSpanEvent({
-      traceId: traceId,
-      spanId: spanId,
-      eventName: 'Payment Initiated',
-      attributes: { 'payment.method': 'card' },
-    });
+    const addEventReq = new AddSpanEventRequest();
+    addEventReq.setTraceId(traceId);
+    addEventReq.setSpanId(spanId);
+    addEventReq.setEventName('Payment Initiated');
+    addEventReq.getAttributesMap().set('payment.method', 'card');
+
+    await client.addSpanEvent(addEventReq);
 
     // Finish span
-    await client.finishSpan({
-      traceId: traceId,
-      spanId: spanId,
-    });
+    const finishSpanReq = new FinishSpanRequest();
+    finishSpanReq.setTraceId(traceId);
+    finishSpanReq.setSpanId(spanId);
+
+    const spanStatus = new FinishSpanRequest.SpanStatus();
+    spanStatus.setCode(FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_OK);
+    finishSpanReq.setStatus(spanStatus);
+
+    await client.finishSpan(finishSpanReq);
   } catch (error) {
     console.error('Tracing error:', error);
   }
