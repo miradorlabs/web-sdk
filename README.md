@@ -8,190 +8,330 @@ Web browser SDK for the Parallax tracing platform. This package provides a brows
 npm install @miradorlabs/parallax-web
 ```
 
-## Usage
+## Features
+
+- 🚀 **ParallaxService** - High-level API for transaction tracing with automatic lifecycle management
+- 🔧 **ParallaxClient** - Low-level client for advanced use cases
+- 🌐 **Browser-optimized** - Automatic client metadata collection (browser, OS, IP, etc.)
+- ⛓️ **Blockchain integration** - Built-in support for correlating transactions with blockchain events
+- 📦 **TypeScript support** - Full type definitions included
+- 🎯 **Automatic root spans** - Creating a trace now automatically creates a root span
+
+## Quick Start with ParallaxService (Recommended)
+
+The `ParallaxService` provides a simplified API for tracking transactions:
+
+```typescript
+import { parallaxService } from '@miradorlabs/parallax-web';
+
+// Start tracking a transaction (creates trace + root span automatically)
+const { traceId, rootSpanId, txId } = await parallaxService.startTransactionTrace(
+  {
+    from: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    to: '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199',
+    value: '0.1',
+    network: 'ethereum',
+    walletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  },
+  'SendTransaction',
+  { includeClientMeta: true } // Automatically collects browser, OS, IP, etc.
+);
+
+// Associate the blockchain transaction hash
+await parallaxService.associateTransactionHash(txId, '0xabc123...', 1);
+
+// Add events as the transaction progresses
+await parallaxService.addTransactionEvent(txId, 'wallet_signed', {
+  timestamp: new Date().toISOString(),
+});
+
+// Track errors if they occur
+try {
+  // transaction logic
+} catch (error) {
+  await parallaxService.addTransactionError(txId, error, 'TransactionError');
+}
+
+// Finish the trace when done
+await parallaxService.finishTransactionTrace(txId, { success: true });
+```
+
+### ParallaxService API
+
+#### `startTransactionTrace(txData, name, options)`
+
+Starts a new transaction trace with automatic root span creation.
+
+**Important:** When you create a trace, a root span is **automatically created** on the backend. You receive a `rootSpanId` in the response - no need to call `startSpan` separately!
+
+**Parameters:**
+- `txData`: Transaction details (from, to, value, network, etc.)
+- `name`: Trace name (default: 'WalletTransaction')
+- `options`: Optional configuration
+  - `apiKey`: API key for authentication
+  - `gatewayUrl`: Custom gateway URL
+  - `includeClientMeta`: Include browser/OS metadata (default: true)
+
+**Returns:** `{ traceId, rootSpanId, txId }`
+
+#### Other Methods
+
+- `associateTransactionHash(txId, txHash, chainId)` - Link blockchain transaction
+- `addTransactionEvent(txId, eventName, attributes)` - Add event to trace
+- `addTransactionError(txId, error, errorType)` - Track errors with stack traces
+- `finishTransactionTrace(txId, options)` - Complete the trace
+- `getTransactionInfo(txId)` - Get active transaction info
+- `getAllActiveTransactions()` - List all active transactions
+- `getClient()` - Access underlying ParallaxClient for advanced usage
+
+See [PARALLAX_SERVICE_USAGE.md](./PARALLAX_SERVICE_USAGE.md) for comprehensive documentation.
+
+## Advanced Usage with ParallaxClient
+
+For more control, use the low-level `ParallaxClient`:
 
 ### Basic Setup
 
 ```typescript
-import { ParallaxClient, CreateTraceRequest } from '@miradorlabs/parallax-web';
+import { ParallaxClient } from '@miradorlabs/parallax-web';
 
-// Initialize the client with your API key
+// Initialize the client
 const client = new ParallaxClient('your-api-key');
 
 // Or with a custom gateway URL
 const client = new ParallaxClient('your-api-key', 'https://your-gateway.example.com:50053');
 ```
 
-### Creating a Trace
+### Helper Methods
+
+The client provides helper methods to create requests easily:
+
+#### Creating a Trace
 
 ```typescript
-import { CreateTraceRequest } from '@miradorlabs/parallax-web';
+// Use the helper method
+const createTraceReq = await client.createTraceRequest({
+  name: 'My Application Trace',
+  attr: {
+    'project.id': 'my-project',
+    'environment': 'production',
+  },
+  tags: ['web', 'user-action'],
+  includeClientMeta: true, // Includes browser, OS, IP, etc.
+});
 
-const request = new CreateTraceRequest();
-request.setName('My Application Trace');
-
-// Set attributes using the map
-const attributesMap = request.getAttributesMap();
-attributesMap.set('project.id', 'my-project');
-attributesMap.set('environment', 'production');
-
-request.setTagsList(['web', 'user-action']);
-
-const traceResponse = await client.createTrace(request);
+const traceResponse = await client.createTrace(createTraceReq);
 const traceId = traceResponse.getTraceId();
+const rootSpanId = traceResponse.getRootSpanId(); // Root span automatically created!
 ```
 
-### Starting a Span
+#### Starting a Span (Child Span)
+
+Note: You only need to call `startSpan` if you want to create **child spans**. The root span is automatically created when you create a trace.
 
 ```typescript
-import { StartSpanRequest } from '@miradorlabs/parallax-web';
+// Create a child span under the root span
+const startSpanReq = await client.createStartSpanRequest({
+  traceId: traceId,
+  name: 'User Login',
+  parentSpanId: rootSpanId, // Use root span as parent
+  attr: {
+    'user.id': 'user-123',
+    'action': 'login',
+  },
+  includeClientMeta: false, // Optional
+});
 
-const request = new StartSpanRequest();
-request.setName('User Login');
-request.setTraceId(traceId);
-
-// Set attributes using the map
-const attributesMap = request.getAttributesMap();
-attributesMap.set('user.id', 'user-123');
-attributesMap.set('action', 'login');
-
-const spanResponse = await client.startSpan(request);
+const spanResponse = await client.startSpan(startSpanReq);
 const spanId = spanResponse.getSpanId();
 ```
 
-### Adding Span Events
+#### Adding Span Events
 
 ```typescript
-import { AddSpanEventRequest } from '@miradorlabs/parallax-web';
+const eventReq = client.createAddSpanEventRequest({
+  traceId: traceId,
+  spanId: spanId,
+  eventName: 'User Authenticated',
+  attr: {
+    'auth.method': 'oauth',
+    'auth.provider': 'google',
+  },
+});
 
-const request = new AddSpanEventRequest();
-request.setTraceId(traceId);
-request.setSpanId(spanId);
-request.setEventName('User Authenticated');
-
-const attributesMap = request.getAttributesMap();
-attributesMap.set('auth.method', 'oauth');
-attributesMap.set('auth.provider', 'google');
-
-await client.addSpanEvent(request);
+await client.addSpanEvent(eventReq);
 ```
 
-### Adding Span Errors
+#### Adding Span Errors
 
 ```typescript
-import { AddSpanErrorRequest } from '@miradorlabs/parallax-web';
+try {
+  // some operation
+} catch (error) {
+  const errorReq = client.createAddSpanErrorRequest({
+    traceId: traceId,
+    spanId: spanId,
+    errorMessage: error.message,
+    errorType: 'ValidationError',
+    stackTrace: error.stack,
+  });
 
-const request = new AddSpanErrorRequest();
-request.setTraceId(traceId);
-request.setSpanId(spanId);
-request.setErrorType('ValidationError');
-request.setMessage('Invalid email format');
-request.setStackTrace(error.stack);
-
-const attributesMap = request.getAttributesMap();
-attributesMap.set('error.field', 'email');
-
-await client.addSpanError(request);
+  await client.addSpanError(errorReq);
+}
 ```
 
-### Adding Span Hints (Blockchain Transactions)
+#### Adding Span Hints (Blockchain Transactions)
 
 ```typescript
-import { AddSpanHintRequest } from '@miradorlabs/parallax-web';
+const hintReq = client.createAddSpanHintRequest({
+  traceId: traceId,
+  parentSpanId: rootSpanId,
+  txHash: '0x1234567890abcdef',
+  chainId: 1, // Ethereum mainnet
+});
 
-const chainTx = new AddSpanHintRequest.ChainTransaction();
-chainTx.setTxHash('0x1234567890abcdef');
-chainTx.setChainId(1); // Ethereum mainnet
-
-const request = new AddSpanHintRequest();
-request.setTraceId(traceId);
-request.setParentSpanId(spanId);
-request.setChainTransaction(chainTx);
-
-await client.addSpanHint(request);
+await client.addSpanHint(hintReq);
 ```
 
-### Finishing a Span
+#### Finishing a Span
 
 ```typescript
-import { FinishSpanRequest } from '@miradorlabs/parallax-web';
+const finishReq = client.createFinishSpanRequest({
+  traceId: traceId,
+  spanId: spanId,
+  status: {
+    success: true,
+    errorMessage: '', // or error message if failed
+  },
+});
 
-const spanStatus = new FinishSpanRequest.SpanStatus();
-spanStatus.setCode(FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_OK);
-
-const request = new FinishSpanRequest();
-request.setTraceId(traceId);
-request.setSpanId(spanId);
-request.setStatus(spanStatus);
-
-await client.finishSpan(request);
+await client.finishSpan(finishReq);
 ```
 
-## Complete Example
+## Complete Example: Transaction Tracking
 
 ```typescript
-import {
-  ParallaxClient,
-  CreateTraceRequest,
-  StartSpanRequest,
-  AddSpanEventRequest,
-  FinishSpanRequest,
-} from '@miradorlabs/parallax-web';
+import { parallaxService } from '@miradorlabs/parallax-web';
 
-async function trackUserAction() {
-  const client = new ParallaxClient('your-api-key');
+async function handleWalletTransaction(userAddress, recipientAddress, amount) {
+  let txId;
 
   try {
-    // Create trace
-    const createTraceReq = new CreateTraceRequest();
-    createTraceReq.setName('User Purchase Flow');
-    createTraceReq.getAttributesMap().set('user.id', 'user-123');
-    createTraceReq.setTagsList(['purchase', 'web']);
+    // 1. Start the trace (automatically creates root span)
+    const result = await parallaxService.startTransactionTrace(
+      {
+        from: userAddress,
+        to: recipientAddress,
+        value: amount,
+        network: 'ethereum',
+        walletAddress: userAddress,
+      },
+      'SendETH',
+      { includeClientMeta: true }
+    );
 
-    const traceResponse = await client.createTrace(createTraceReq);
-    const traceId = traceResponse.getTraceId();
+    txId = result.txId;
+    console.log('Trace started:', result.traceId);
 
-    // Start span
-    const startSpanReq = new StartSpanRequest();
-    startSpanReq.setName('Checkout Process');
-    startSpanReq.setTraceId(traceId);
-    startSpanReq.getAttributesMap().set('cart.items', '3');
+    // 2. User signs the transaction
+    await parallaxService.addTransactionEvent(txId, 'user_signing', {});
 
-    const spanResponse = await client.startSpan(startSpanReq);
-    const spanId = spanResponse.getSpanId();
+    const signedTx = await wallet.signTransaction(txData);
 
-    // Add event
-    const addEventReq = new AddSpanEventRequest();
-    addEventReq.setTraceId(traceId);
-    addEventReq.setSpanId(spanId);
-    addEventReq.setEventName('Payment Initiated');
-    addEventReq.getAttributesMap().set('payment.method', 'card');
+    await parallaxService.addTransactionEvent(txId, 'transaction_signed', {});
 
-    await client.addSpanEvent(addEventReq);
+    // 3. Send to network
+    await parallaxService.addTransactionEvent(txId, 'sending_to_network', {});
 
-    // Finish span
-    const finishSpanReq = new FinishSpanRequest();
-    finishSpanReq.setTraceId(traceId);
-    finishSpanReq.setSpanId(spanId);
+    const txReceipt = await provider.sendTransaction(signedTx);
 
-    const spanStatus = new FinishSpanRequest.SpanStatus();
-    spanStatus.setCode(FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_OK);
-    finishSpanReq.setStatus(spanStatus);
+    // 4. Associate the blockchain transaction hash
+    await parallaxService.associateTransactionHash(txId, txReceipt.hash, 1);
 
-    await client.finishSpan(finishSpanReq);
+    // 5. Wait for confirmation
+    await parallaxService.addTransactionEvent(txId, 'waiting_confirmation', {
+      txHash: txReceipt.hash,
+    });
+
+    await txReceipt.wait();
+
+    // 6. Success!
+    await parallaxService.finishTransactionTrace(txId, { success: true });
+    console.log('Transaction completed successfully');
+
   } catch (error) {
-    console.error('Tracing error:', error);
+    console.error('Transaction failed:', error);
+
+    if (txId) {
+      await parallaxService.addTransactionError(txId, error, 'TransactionError');
+      await parallaxService.finishTransactionTrace(txId, {
+        success: false,
+        error: error.message,
+      });
+    }
+
+    throw error;
   }
 }
 ```
 
+## Automatic Client Metadata Collection
+
+When `includeClientMeta: true` is set, the SDK automatically collects:
+
+- **Browser**: Chrome, Firefox, Safari, Edge, etc.
+- **Operating System**: Windows, macOS, Linux, Android, iOS
+- **User Agent**: Full user agent string
+- **Platform**: Browser platform
+- **Language**: Browser language
+- **Screen**: Width and height
+- **Viewport**: Width and height
+- **Timezone**: User's timezone and offset
+- **URL**: Current page URL
+- **Referrer**: Page referrer
+- **IP Address**: Client IP (if not blocked by CSP)
+
+All metadata is prefixed with `client.` in trace attributes.
+
+## Environment Detection
+
+The SDK automatically detects the environment:
+
+- **Localhost/127.0.0.1**: Uses proxy at `${window.location.protocol}//${window.location.host}/parallax-gateway`
+- **Production**: Uses `https://gateway-parallax-dev.mirador.org`
+
+Override with the `gatewayUrl` option.
+
+## TypeScript Support
+
+Full TypeScript support with exported types:
+
+```typescript
+import type {
+  CreateTraceRequest,
+  CreateTraceResponse,
+  StartSpanRequest,
+  StartSpanResponse,
+  FinishSpanRequest,
+  FinishSpanResponse,
+  AddSpanEventRequest,
+  AddSpanEventResponse,
+  AddSpanErrorRequest,
+  AddSpanErrorResponse,
+  AddSpanHintRequest,
+  AddSpanHintResponse,
+} from '@miradorlabs/parallax-web';
+```
+
 ## Browser Compatibility
 
-This SDK uses the Fetch API and is compatible with modern browsers that support:
-- ES2020
+This SDK uses modern browser APIs and is compatible with:
+
+- ES2020+
 - Fetch API
 - Promises
 - Uint8Array
+- Modern browsers (Chrome, Firefox, Safari, Edge)
 
 For older browsers, you may need polyfills.
 
@@ -199,9 +339,38 @@ For older browsers, you may need polyfills.
 
 The package provides multiple module formats:
 
-- **ESM** (`dist/index.esm.js`): For modern bundlers (Webpack, Vite, etc.)
+- **ESM** (`dist/index.esm.js`): For modern bundlers (Webpack, Vite, Rollup)
 - **UMD** (`dist/index.umd.js`): For browser globals and older module systems
 - **TypeScript** (`dist/index.d.ts`): Type definitions
+
+## Key Differences from Node.js Client
+
+The web client (`@miradorlabs/parallax-web`) differs from the Node.js client (`@miradorlabs/parallax`):
+
+| Feature | Web Client | Node.js Client |
+|---------|------------|----------------|
+| Transport | gRPC-Web (HTTP/1.1) | gRPC (@grpc/grpc-js) |
+| Protocol | `https://` | `http://` or `https://` |
+| Environment | Browser | Node.js |
+| Protobuf | google-protobuf (classes) | ts-proto (plain objects) |
+| API Style | `.getTraceId()` setters/getters | `.traceId` properties |
+| Client Metadata | Browser-specific | Server-specific |
+
+## Important Update: Automatic Root Span Creation
+
+**Breaking Change (v1.0.5+):**
+
+When you call `createTrace()`, a root span is now **automatically created** on the backend. The response includes:
+- `traceId`: The trace identifier
+- `rootSpanId`: The automatically created root span ID
+
+**You no longer need to:**
+- Call `startSpan()` immediately after `createTrace()`
+- Manually create the first span
+
+**When to use `startSpan()`:**
+- Only when you need **child spans** for more detailed tracking
+- Use `rootSpanId` as the `parentSpanId` for child spans
 
 ## Development
 
@@ -219,21 +388,18 @@ npm run test:watch
 npm run test:coverage
 ```
 
-### Linting
+### Publishing
 
 ```bash
-npm run lint
-npm run format
+npm run release:patch  # 1.0.x
+npm run release:minor  # 1.x.0
+npm run release:major  # x.0.0
 ```
 
-## Differences from Node.js Client
+## Documentation
 
-The web client differs from `@miradorlabs/parallax` (Node.js) in the following ways:
-
-- Uses **gRPC-Web** instead of gRPC (`@grpc/grpc-js`)
-- Uses browser **Fetch API** instead of Node.js HTTP
-- Uses **https** URLs instead of insecure connections
-- Designed for browser environments (no Node.js dependencies)
+- [ParallaxService Usage Guide](./PARALLAX_SERVICE_USAGE.md) - Comprehensive guide for the high-level API
+- [Examples](./examples) - More usage examples
 
 ## License
 
