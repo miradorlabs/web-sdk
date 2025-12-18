@@ -9,17 +9,10 @@
 import { ParallaxClient } from './index';
 import type {
   CreateTraceResponse,
-  StartSpanResponse,
-  FinishSpanResponse,
-  AddSpanEventResponse,
-  AddSpanErrorResponse,
-  AddSpanHintResponse,
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 
 interface TransactionInfo {
   traceId: string;
-  rootSpanId: string;
-  spanId: string | null;
   timestamp: string;
   txHash: string | null;
   from?: string;
@@ -77,8 +70,7 @@ export class ParallaxService {
    * Start a new transaction trace
    * Called when user initiates a transaction
    *
-   * Note: Since createTrace now automatically creates a root span, we don't need
-   * to call startSpan separately. The rootSpanId from the response is the parent span.
+   * Uses the builder pattern to create a trace with events
    *
    * @param txData - Transaction data
    * @param name - Name for the trace (e.g., 'SendingTrace', 'SwappingTrace')
@@ -98,44 +90,41 @@ export class ParallaxService {
 
     try {
       const txId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const timestamp = new Date().toISOString();
+      const timestamp = new Date();
 
-      // Create trace attributes
-      const traceAttributes: Record<string, string> = {
-        transactionId: txId,
-        walletAddress: txData.walletAddress || txData.from,
-        network: txData.network || 'Unknown',
-        transactionStart: timestamp,
-        from: txData.from,
-        to: txData.to,
-        value: txData.value,
-      };
+      // Build the trace using the builder pattern
+      const builder = this.client
+        .trace(name, options?.includeClientMeta ?? true)
+        .addAttribute('transactionId', txId)
+        .addAttribute('walletAddress', txData.walletAddress || txData.from)
+        .addAttribute('network', txData.network || 'Unknown')
+        .addAttribute('transactionStart', timestamp.toISOString())
+        .addAttribute('from', txData.from)
+        .addAttribute('to', txData.to)
+        .addAttribute('value', txData.value)
+        .addTags(['transaction', 'wallet', txData.network || 'unknown'])
+        .addEvent('transaction_initiated', {
+          from: txData.from,
+          to: txData.to,
+          value: txData.value,
+          timestamp: timestamp.toISOString(),
+        });
 
-      // Add any additional transaction data
+      // Add any additional transaction data as attributes
       if (txData.additionalData) {
         Object.entries(txData.additionalData).forEach(([key, value]) => {
-          traceAttributes[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+          builder.addAttribute(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
         });
       }
 
-      // Create a trace for this transaction
-      const createTraceReq = await this.client.createTraceRequest({
-        name: name,
-        attr: traceAttributes,
-        tags: ['transaction', 'wallet', txData.network || 'unknown'],
-        includeClientMeta: options?.includeClientMeta ?? true,
-      });
-
-      const traceResponse: CreateTraceResponse = await this.client.createTrace(createTraceReq);
+      // Submit the trace
+      const traceResponse: CreateTraceResponse = await builder.submit();
       const traceId = traceResponse.getTraceId();
-      const rootSpanId = traceResponse.getRootSpanId();
 
       // Store transaction info
       this.activeTransactions.set(txId, {
         traceId,
-        rootSpanId,
-        spanId: rootSpanId, // Use rootSpanId as the main span for this transaction
-        timestamp,
+        timestamp: timestamp.toISOString(),
         txHash: null,
         from: txData.from,
         to: txData.to,
@@ -145,20 +134,11 @@ export class ParallaxService {
       console.log('[ParallaxService] Transaction trace started:', {
         txId,
         traceId,
-        rootSpanId,
         from: txData.from,
         to: txData.to,
       });
 
-      // Add initial event to the root span
-      await this.addTransactionEvent(txId, 'transaction_initiated', {
-        from: txData.from,
-        to: txData.to,
-        value: txData.value,
-        timestamp,
-      });
-
-      return { traceId, rootSpanId, txId };
+      return { traceId, rootSpanId: traceId, txId };
     } catch (error) {
       console.error('[ParallaxService] Failed to start transaction trace:', error);
       throw error;
@@ -169,9 +149,13 @@ export class ParallaxService {
    * Associate a transaction hash with an existing trace
    * Called when the transaction hash is available after signing/sending
    *
+   * NOTE: This method is deprecated as the new API does not support adding hints to existing traces.
+   * Transaction hashes should be provided at trace creation time via the builder's submit(txHash, chainId) method.
+   *
    * @param txId - Transaction identifier returned from startTransactionTrace
    * @param txHash - Blockchain transaction hash
    * @param chainId - Chain ID
+   * @deprecated Use submit(txHash, chainId) when creating the trace instead
    */
   async associateTransactionHash(txId: string, txHash: string, chainId: number): Promise<void> {
     const txInfo = this.activeTransactions.get(txId);
@@ -180,49 +164,28 @@ export class ParallaxService {
       return;
     }
 
-    if (!this.client) {
-      console.warn('[ParallaxService] Client not initialized');
-      return;
-    }
+    // Update stored tx info
+    txInfo.txHash = txHash;
+    this.activeTransactions.set(txId, txInfo);
 
-    try {
-      // Update stored tx info
-      txInfo.txHash = txHash;
-      this.activeTransactions.set(txId, txInfo);
-
-      // Add chain hint to correlate with blockchain events
-      const hintReq = this.client.createAddSpanHintRequest({
-        traceId: txInfo.traceId,
-        parentSpanId: txInfo.rootSpanId,
-        txHash: txHash,
-        chainId: chainId,
-      });
-
-      await this.client.addSpanHint(hintReq);
-
-      // Add event for transaction sent
-      await this.addTransactionEvent(txId, 'transaction_hash_available', {
-        txHash,
-        chainId: chainId.toString(),
-        timestamp: new Date().toISOString(),
-      });
-
-      console.log('[ParallaxService] Transaction hash associated with trace:', {
-        txId,
-        txHash,
-        traceId: txInfo.traceId,
-      });
-    } catch (error) {
-      console.error('[ParallaxService] Failed to associate transaction hash:', error);
-    }
+    console.warn('[ParallaxService] associateTransactionHash is deprecated. The new API does not support adding transaction hashes after trace creation. Please provide the txHash when creating the trace using submit(txHash, chainId).');
+    console.log('[ParallaxService] Transaction hash updated in local cache:', {
+      txId,
+      txHash,
+      traceId: txInfo.traceId,
+    });
   }
 
   /**
    * Add an event to a transaction trace
    *
+   * NOTE: This method is deprecated as the new API does not support adding events to existing traces.
+   * Events should be added to the trace builder before calling submit().
+   *
    * @param txId - Transaction identifier
    * @param eventName - Event name
    * @param attributes - Event attributes
+   * @deprecated Use the trace builder's addEvent() method before calling submit() instead
    */
   async addTransactionEvent(
     txId: string,
@@ -235,38 +198,19 @@ export class ParallaxService {
       return;
     }
 
-    if (!this.client || !txInfo.spanId) {
-      console.warn('[ParallaxService] Client not initialized or span not available');
-      return;
-    }
-
-    try {
-      // Convert attributes to plain object with string values
-      const eventAttributes: Record<string, string> = {};
-      Object.entries(attributes).forEach(([key, value]) => {
-        eventAttributes[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      });
-
-      const request = this.client.createAddSpanEventRequest({
-        traceId: txInfo.traceId,
-        spanId: txInfo.spanId,
-        eventName: eventName,
-        attr: eventAttributes,
-      });
-
-      await this.client.addSpanEvent(request);
-    } catch (error) {
-      console.error(`[ParallaxService] Failed to add transaction event '${eventName}':`, error);
-    }
+    console.warn('[ParallaxService] addTransactionEvent is deprecated. The new API does not support adding events after trace creation. Events should be added using the builder pattern before calling submit().');
   }
 
   /**
    * Add an error to a transaction trace
-   * Creates a proper span error event in Parallax
+   *
+   * NOTE: This method is deprecated as the new API does not support adding errors to existing traces.
+   * Errors should be added as events to the trace builder before calling submit().
    *
    * @param txId - Transaction identifier
    * @param error - Error object or message
    * @param errorType - Type/category of error (e.g., 'TransactionError', 'NetworkError', 'UserRejection')
+   * @deprecated Use the trace builder's addEvent() method to add error events before calling submit() instead
    */
   async addTransactionError(
     txId: string,
@@ -279,49 +223,18 @@ export class ParallaxService {
       return;
     }
 
-    if (!this.client || !txInfo.spanId) {
-      console.warn('[ParallaxService] Client not initialized or span not available');
-      return;
-    }
-
-    try {
-      // Extract error message and stack trace
-      let errorMessage = '';
-      let stackTrace: string | undefined;
-
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        stackTrace = error.stack;
-      } else {
-        errorMessage = String(error);
-      }
-
-      const request = this.client.createAddSpanErrorRequest({
-        traceId: txInfo.traceId,
-        spanId: txInfo.spanId,
-        errorMessage: errorMessage,
-        errorType: errorType,
-        stackTrace: stackTrace,
-      });
-
-      await this.client.addSpanError(request);
-
-      console.log('[ParallaxService] Transaction error added to trace:', {
-        txId,
-        errorType,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    } catch (err) {
-      console.error('[ParallaxService] Failed to add transaction error:', err);
-    }
+    console.warn('[ParallaxService] addTransactionError is deprecated. The new API does not support adding errors after trace creation. Add error events using the builder pattern before calling submit().');
   }
 
   /**
    * Finish a transaction trace
-   * Called when transaction is confirmed or permanently failed
+   *
+   * NOTE: This method is deprecated as the new API does not support span lifecycle management.
+   * Traces are completed when submit() is called on the builder.
    *
    * @param txId - Transaction identifier
    * @param options - Finish options (success, error message)
+   * @deprecated Traces are automatically completed when submit() is called
    */
   async finishTransactionTrace(txId: string, options: FinishOptions = { success: true }): Promise<void> {
     const txInfo = this.activeTransactions.get(txId);
@@ -330,48 +243,17 @@ export class ParallaxService {
       return;
     }
 
-    if (!this.client || !txInfo.spanId) {
-      console.warn('[ParallaxService] Client not initialized or span not available');
-      return;
-    }
+    console.warn('[ParallaxService] finishTransactionTrace is deprecated. The new API does not support span lifecycle. Traces are completed when submit() is called.');
 
-    try {
-      // Add final event
-      await this.addTransactionEvent(
-        txId,
-        options.success ? 'transaction_completed' : 'transaction_failed',
-        {
-          success: options.success.toString(),
-          error: options.error || '',
-          duration: (Date.now() - new Date(txInfo.timestamp).getTime()).toString(),
-          timestamp: new Date().toISOString(),
-        }
-      );
+    console.log('[ParallaxService] Transaction trace marked as finished (local only):', {
+      txId,
+      traceId: txInfo.traceId,
+      success: options.success,
+      txHash: txInfo.txHash,
+    });
 
-      // Finish the span
-      const request = this.client.createFinishSpanRequest({
-        traceId: txInfo.traceId,
-        spanId: txInfo.spanId,
-        status: {
-          success: options.success,
-          errorMessage: options.error || '',
-        },
-      });
-
-      await this.client.finishSpan(request);
-
-      console.log('[ParallaxService] Transaction trace finished:', {
-        txId,
-        traceId: txInfo.traceId,
-        success: options.success,
-        txHash: txInfo.txHash,
-      });
-
-      // Remove from active transactions
-      this.activeTransactions.delete(txId);
-    } catch (error) {
-      console.error('[ParallaxService] Failed to finish transaction trace:', error);
-    }
+    // Remove from active transactions
+    this.activeTransactions.delete(txId);
   }
 
   /**

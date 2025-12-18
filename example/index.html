@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parallax Trace Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 30px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+
+    .section h2 {
+      color: #495057;
+      font-size: 18px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section h2::before {
+      content: "→";
+      color: #667eea;
+      font-weight: bold;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #495057;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    .input-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+    }
+
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #adb5bd;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+    }
+
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+
+    .btn-danger {
+      background: #dc3545;
+    }
+
+    .btn-danger:hover {
+      background: #c82333;
+    }
+
+    .btn-success {
+      background: #28a745;
+    }
+
+    .btn-success:hover {
+      background: #218838;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+
+    .status.info {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      color: #0c5460;
+    }
+
+    .trace-info {
+      background: #e7f3ff;
+      border: 1px solid #b3d9ff;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .trace-info.show {
+      display: block;
+    }
+
+    .trace-info strong {
+      color: #004085;
+    }
+
+    .trace-info code {
+      background: white;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      color: #495057;
+    }
+
+    .log {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 6px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+
+    .log-entry {
+      margin-bottom: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-time {
+      color: #858585;
+    }
+
+    .log-success {
+      color: #4ec9b0;
+    }
+
+    .log-error {
+      color: #f48771;
+    }
+
+    .log-info {
+      color: #569cd6;
+    }
+
+    .log-warn {
+      color: #dcdcaa;
+    }
+
+    .chip {
+      display: inline-block;
+      background: #e9ecef;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-right: 5px;
+      margin-bottom: 5px;
+      color: #495057;
+    }
+
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+      min-height: 30px;
+      padding: 10px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #ced4da;
+    }
+
+    .attributes-container {
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ced4da;
+      margin-top: 10px;
+      min-height: 60px;
+    }
+
+    .attribute-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    .attribute-key {
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .attribute-value {
+      color: #495057;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Parallax Trace Builder</h1>
+    <p class="subtitle">Create and manage transaction traces with the Parallax SDK</p>
+    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; font-size: 13px;">
+      <strong>🔧 Proxy Mode:</strong> <span id="proxyStatus">Checking...</span>
+    </div>
+
+    <!-- Step 1: Create Trace -->
+    <div class="section">
+      <h2>Create New Trace</h2>
+
+      <div class="form-group">
+        <label for="traceName">Trace Name</label>
+        <input type="text" id="traceName" placeholder="e.g., swap_execution, payment_flow" value="demo_transaction">
+      </div>
+
+      <div class="form-group">
+        <label>Transaction Data</label>
+        <div class="input-group">
+          <div>
+            <label for="fromAddress">From Address</label>
+            <input type="text" id="fromAddress" placeholder="0xabc..." value="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb">
+          </div>
+          <div>
+            <label for="toAddress">To Address</label>
+            <input type="text" id="toAddress" placeholder="0xdef..." value="0x1234567890123456789012345678901234567890">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-group">
+          <div>
+            <label for="value">Value (ETH)</label>
+            <input type="text" id="value" placeholder="0.1" value="0.5">
+          </div>
+          <div>
+            <label for="network">Network</label>
+            <select id="network">
+              <option value="ethereum">Ethereum</option>
+              <option value="polygon">Polygon</option>
+              <option value="arbitrum">Arbitrum</option>
+              <option value="optimism">Optimism</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button id="createTraceBtn">Create Trace</button>
+
+      <div id="traceInfo" class="trace-info">
+        <strong>Trace Created!</strong><br>
+        <div style="margin-top: 8px;">
+          Trace ID: <code id="traceId"></code><br>
+          Transaction ID: <code id="txId"></code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Add Attributes -->
+    <div id="attributesSection" class="section hidden">
+      <h2>Add Custom Attributes</h2>
+
+      <div class="input-group">
+        <div class="form-group">
+          <label for="attrKey">Attribute Key</label>
+          <input type="text" id="attrKey" placeholder="e.g., slippage_bps, gas_limit">
+        </div>
+        <div class="form-group">
+          <label for="attrValue">Attribute Value</label>
+          <input type="text" id="attrValue" placeholder="e.g., 50, 21000">
+        </div>
+      </div>
+
+      <button id="addAttributeBtn" class="btn-secondary">Add Attribute</button>
+
+      <div class="attributes-container" id="attributesContainer">
+        <em style="color: #6c757d; font-size: 13px;">No custom attributes added yet</em>
+      </div>
+    </div>
+
+    <!-- Step 3: Add Tags -->
+    <div id="tagsSection" class="section hidden">
+      <h2>Add Tags</h2>
+
+      <div class="form-group">
+        <label for="tagInput">Tag Name</label>
+        <input type="text" id="tagInput" placeholder="e.g., dex, swap, critical">
+      </div>
+
+      <button id="addTagBtn" class="btn-secondary">Add Tag</button>
+
+      <div class="tags-container" id="tagsContainer">
+        <em style="color: #6c757d; font-size: 13px;">No tags added yet</em>
+      </div>
+    </div>
+
+    <!-- Step 4: Add Events -->
+    <div id="eventsSection" class="section hidden">
+      <h2>Add Events</h2>
+
+      <div class="form-group">
+        <label for="eventName">Event Name</label>
+        <input type="text" id="eventName" placeholder="e.g., wallet_connected, quote_received">
+      </div>
+
+      <div class="form-group">
+        <label for="eventDetails">Event Details (JSON or text)</label>
+        <textarea id="eventDetails" placeholder='{"amount": 100, "currency": "USD"}'></textarea>
+      </div>
+
+      <button id="addEventBtn" class="btn-secondary">Add Event</button>
+    </div>
+
+    <!-- Step 5: Submit with Transaction Hash -->
+    <div id="submitSection" class="section hidden">
+      <h2>Submit Trace</h2>
+
+      <div class="form-group">
+        <label for="txHash">Transaction Hash (optional)</label>
+        <input type="text" id="txHash" placeholder="0x123...">
+      </div>
+
+      <div class="form-group">
+        <label for="chainId">Chain ID (optional)</label>
+        <input type="text" id="chainId" placeholder="1" value="1">
+      </div>
+
+      <div class="button-group">
+        <button id="submitBtn" class="btn-success">Submit Trace</button>
+        <button id="resetBtn" class="btn-danger">Reset & Start Over</button>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="section">
+      <h2>Activity Log</h2>
+      <div id="log" class="log">
+        <div class="log-entry">
+          <span class="log-time">[00:00:00]</span>
+          <span class="log-info">Ready to create a trace...</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script type="module" src="./bundle.js"></script>
+</body>
+</html>

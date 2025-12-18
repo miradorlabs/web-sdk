@@ -2,20 +2,11 @@
 import {
   CreateTraceRequest,
   CreateTraceResponse,
-  StartSpanRequest,
-  StartSpanResponse,
-  FinishSpanRequest,
-  FinishSpanResponse,
-  AddSpanEventRequest,
-  AddSpanEventResponse,
-  AddSpanErrorRequest,
-  AddSpanErrorResponse,
-  AddSpanHintRequest,
-  AddSpanHintResponse,
 } from "mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb";
 import { ParallaxGatewayServiceClient } from "mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb";
+import { Timestamp } from "google-protobuf/google/protobuf/timestamp_pb";
 
-const GRPC_GATEWAY_API_URL = "https://gateway-parallax-dev.platform.svc.cluster.local:50053";
+const GRPC_GATEWAY_API_URL = "https://parallax-gateway.dev.mirador.org:443";
 
 const debugIssue = (trace: string, error: Error) => {
   // Handle our own debugging / logging here
@@ -176,187 +167,209 @@ class ParallaxClient {
   }
 
   /**
-   * Create a StartSpanRequest with optional attributes and client metadata
-   * @param traceId trace id to associate the span with
-   * @param name name of the span
-   * @param parentSpanId (optional) create a span off a parent span id
-   * @param attr (optional) attributes to add to the span
-   * @param includeClientMeta (optional) flag to include client metadata (ip, browser, os, etc)
-   * @returns 
+   * Create a new trace builder
+   *
+   * Example usage:
+   * ```typescript
+   * const response = await client.trace("swap_execution")
+   *   .addAttribute("user", "0xabc...")
+   *   .addAttribute("slippage_bps", 25)
+   *   .addTag("dex")
+   *   .addTag("swap")
+   *   .addEvent("wallet_connected", { wallet: "MetaMask" })
+   *   .addEvent("quote_received")
+   *   .submit("0x123...", "ethereum");
+   * ```
+   *
+   * @param name The name of the trace
+   * @param includeClientMeta Optional flag to automatically include client metadata
+   * @returns A ParallaxTrace builder instance
    */
-  async createStartSpanRequest({ traceId, name, parentSpanId, attr, includeClientMeta = false}: {traceId: string, name: string, parentSpanId?: string, attr?: { [key: string]: string }, includeClientMeta?: boolean}): Promise<StartSpanRequest> {
-    const startSpanReq = new StartSpanRequest();
-    startSpanReq.setTraceId(traceId);
-    startSpanReq.setName(name);
-    if (parentSpanId) {
-      startSpanReq.setParentSpanId(parentSpanId);
-    }
-    const spanAttrs = startSpanReq.getAttributesMap();
+  trace(name: string, includeClientMeta: boolean = false): ParallaxTrace {
+    return new ParallaxTrace(this, name, includeClientMeta);
+  }
 
-    if (attr) {
-      Object.entries(attr).forEach(([key, value]) => {
-        if (key.includes('client.')) {
-          console.warn(`Attribute key "${key}" is reserved for client metadata. It will be prefixed with "custom."`);
-        } else {
-          spanAttrs.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-        }
-      });
+}
+
+/**
+ * Builder class for constructing traces with method chaining
+ * Automatically handles web-specific features like client metadata
+ */
+class ParallaxTrace {
+  private name: string;
+  private attributes: { [key: string]: string } = {};
+  private tags: string[] = [];
+  private events: Array<{ eventName: string; details?: string; timestamp: Date }> = [];
+  private txHashHint?: {
+    txHash: string;
+    chainId: string;
+    details?: string;
+    timestamp: Date;
+  };
+  private client: ParallaxClient;
+  private includeClientMeta: boolean;
+
+  constructor(client: ParallaxClient, name: string, includeClientMeta: boolean = false) {
+    this.client = client;
+    this.name = name;
+    this.includeClientMeta = includeClientMeta;
+  }
+
+  /**
+   * Add an attribute to the trace
+   * @param key Attribute key
+   * @param value Attribute value (will be converted to string)
+   * @returns This trace builder for chaining
+   */
+  addAttribute(key: string, value: string | number | boolean): this {
+    this.attributes[key] = String(value);
+    return this;
+  }
+
+  /**
+   * Add multiple attributes to the trace
+   * @param attributes Object containing key-value pairs
+   * @returns This trace builder for chaining
+   */
+  addAttributes(attributes: { [key: string]: string | number | boolean }): this {
+    for (const [key, value] of Object.entries(attributes)) {
+      this.attributes[key] = String(value);
     }
-    try {
-      if (includeClientMeta) {
-        const clientMetadata = await this.getClientMetadata();
-        Object.entries(clientMetadata).forEach(([key, value]) => {
-          spanAttrs.set(`client.${key}`, value);
-        });
+    return this;
+  }
+
+  /**
+   * Add a tag to the trace
+   * @param tag Tag to add
+   * @returns This trace builder for chaining
+   */
+  addTag(tag: string): this {
+    this.tags.push(tag);
+    return this;
+  }
+
+  /**
+   * Add multiple tags to the trace
+   * @param tags Array of tags to add
+   * @returns This trace builder for chaining
+   */
+  addTags(tags: string[]): this {
+    this.tags.push(...tags);
+    return this;
+  }
+
+  /**
+   * Add an event to the trace
+   * @param eventName Name of the event
+   * @param details Optional details (can be a JSON string or object that will be stringified)
+   * @param timestamp Optional timestamp (defaults to current time)
+   * @returns This trace builder for chaining
+   */
+  addEvent(eventName: string, details?: string | object, timestamp?: Date): this {
+    const detailsString = typeof details === 'object' && details !== null
+      ? JSON.stringify(details)
+      : details;
+
+    this.events.push({
+      eventName,
+      details: detailsString,
+      timestamp: timestamp || new Date(),
+    });
+    return this;
+  }
+
+  /**
+   * Set or update the transaction hash hint
+   * @param txHash Transaction hash
+   * @param chainId Chain ID (e.g., "ethereum", "polygon")
+   * @param details Optional details about the transaction
+   * @param timestamp Optional timestamp (defaults to current time)
+   * @returns This trace builder for chaining
+   */
+  setTxHash(txHash: string, chainId: string, details?: string, timestamp?: Date): this {
+    this.txHashHint = {
+      txHash,
+      chainId,
+      details,
+      timestamp: timestamp || new Date(),
+    };
+    return this;
+  }
+
+  /**
+   * Submit the trace without a transaction hash hint (if not already set via setTxHash)
+   * @returns Response from the create trace operation
+   */
+  async submit(): Promise<CreateTraceResponse>;
+
+  /**
+   * Submit the trace with a transaction hash hint (overrides any previously set via setTxHash)
+   * @param txHash Transaction hash
+   * @param chainId Chain ID (e.g., "ethereum", "polygon")
+   * @param details Optional details about the transaction
+   * @returns Response from the create trace operation
+   */
+  async submit(txHash: string, chainId: string, details?: string): Promise<CreateTraceResponse>;
+
+  async submit(txHash?: string, chainId?: string, details?: string): Promise<CreateTraceResponse> {
+    // If txHash and chainId are provided in submit(), they override any previously set txHashHint
+    const finalTxHashHint = txHash && chainId ? {
+      txHash,
+      chainId,
+      details,
+      timestamp: new Date(),
+    } : this.txHashHint;
+
+    // Build the CreateTraceRequest
+    const request = new CreateTraceRequest();
+    request.setName(this.name);
+    request.setTagsList(this.tags);
+
+    // Add attributes
+    const attrsMap = request.getAttributesMap();
+    for (const [key, value] of Object.entries(this.attributes)) {
+      attrsMap.set(key, value);
+    }
+
+    // Add client metadata if requested
+    if (this.includeClientMeta) {
+      const clientMetadata = await this.client.getClientMetadata();
+      for (const [key, value] of Object.entries(clientMetadata)) {
+        attrsMap.set(`client.${key}`, value);
       }
-    } catch (error) {
-      console.error('Error gathering client metadata for span:', error);
     }
-    return startSpanReq;
-  }
 
-  /**
-   * Start a new span within a trace
-   * @param params Parameters to start a new span
-   */
-  async startSpan(params: StartSpanRequest): Promise<StartSpanResponse> {
-    try {
-      return await this.client.startSpan(params, null);
-    } catch (_error) {
-      debugIssue("startSpan", new Error('Error starting span'));
-      throw _error;
-    }
-  }
-
-  /**
-   * Create a FinishSpanRequest
-   * @param params Parameters to finish a span - traceId, spanId, status (optional) (success, errorMessage) 
-   * @returns FinishSpanRequest
-   */
-  createFinishSpanRequest({ traceId, spanId, status }: { traceId: string, spanId: string, status?: { success: boolean, errorMessage: string } }): FinishSpanRequest {
-    const request = new FinishSpanRequest();
-    request.setTraceId(traceId);
-    request.setSpanId(spanId);
-    if (status !== undefined) {
-      const spanStatus = new FinishSpanRequest.SpanStatus();
-      spanStatus.setCode(status.success ? FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_OK : FinishSpanRequest.SpanStatus.StatusCode.STATUS_CODE_ERROR);
-      if (status.errorMessage) {
-        spanStatus.setMessage(status.errorMessage);
+    // Add events
+    const eventsList: CreateTraceRequest.Event[] = [];
+    for (const event of this.events) {
+      const eventMsg = new CreateTraceRequest.Event();
+      eventMsg.setEventName(event.eventName);
+      if (event.details) {
+        eventMsg.setDetails(event.details);
       }
-      request.setStatus(spanStatus);
+      const timestamp = new Timestamp();
+      timestamp.fromDate(event.timestamp);
+      eventMsg.setTimestamp(timestamp);
+      eventsList.push(eventMsg);
     }
-    return request;
-  }
+    request.setEventsList(eventsList);
 
-  /**
-   * Finish a span within a trace
-   * @param params Parameters to finish a span
-   */
-  async finishSpan(params: FinishSpanRequest): Promise<FinishSpanResponse> {
-    try {
-      return await this.client.finishSpan(params, null);
-    } catch (_error) {
-      debugIssue("finishSpan", new Error('Error finishing span'));
-      throw _error;
+    // Add transaction hash hint if present
+    if (finalTxHashHint) {
+      const txHint = new CreateTraceRequest.TxHashHint();
+      txHint.setTxHash(finalTxHashHint.txHash);
+      txHint.setChainId(finalTxHashHint.chainId);
+      if (finalTxHashHint.details) {
+        txHint.setDetails(finalTxHashHint.details);
+      }
+      const timestamp = new Timestamp();
+      timestamp.fromDate(finalTxHashHint.timestamp);
+      txHint.setTimestamp(timestamp);
+      request.setTxHashHint(txHint);
     }
-  }
 
-  /**
-   * Creates the add span event request
-   * @param params - Parameters to create an AddSpanEventRequest - traceId, spanId, eventName, attr (optional) 
-   * @returns AddSpanEventRequest
-   */
-  createAddSpanEventRequest({ traceId, spanId, eventName, attr }: { traceId: string, spanId: string, eventName: string,  attr?: { [key: string]: string } }): AddSpanEventRequest {
-    const request = new AddSpanEventRequest();
-    request.setTraceId(traceId);
-    request.setSpanId(spanId);
-    request.setEventName(eventName);
-    const eventAttrs = request.getAttributesMap();
-    if (attr) {
-      Object.entries(attr).forEach(([key, value]) => {
-        eventAttrs.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-      });
-    }
-    eventAttrs.set('timestamp', new Date().toISOString());
-    return request;
-  }
-
-  /**
-   * Add an event to a span
-   * @param params Parameters to add an event to a span
-   */
-  async addSpanEvent(params: AddSpanEventRequest): Promise<AddSpanEventResponse> {
-    try {
-      return await this.client.addSpanEvent(params, null);
-    } catch (_error) {
-      debugIssue("addSpanEvent", new Error('Error adding span event'));
-      throw _error;
-    }
-  }
-
-  /**
-   * Creates the add span error request
-   * @param params - params used to generate the error request ( traceid, span id, error message, error type, stack trace)
-   * @returns AddSpanErrorRequest
-   */
-  createAddSpanErrorRequest({ traceId, spanId, errorMessage, errorType, stackTrace }: { traceId: string, spanId: string, errorMessage: string, errorType?: string, stackTrace?: string }): AddSpanErrorRequest {
-    const request = new AddSpanErrorRequest();
-    request.setTraceId(traceId);
-    request.setSpanId(spanId);
-    request.setMessage(errorMessage);
-    if (errorType) {
-      request.setErrorType(errorType);
-    }
-    if (stackTrace) {
-      request.setStackTrace(stackTrace);
-    }
-    return request;
-  }
-
-  /**
-   * Add an error to a span
-   * @param params Parameters to add an error to a span
-   */
-  async addSpanError(params: AddSpanErrorRequest): Promise<AddSpanErrorResponse> {
-    try {
-      return await this.client.addSpanError(params, null);
-    } catch (_error) {
-      debugIssue("addSpanError", new Error('Error adding span error'));
-      throw _error;
-    }
-  }
-
-  /**
-   * Creates the add span hint request
-   * @param params - params used to generate the span hint (trace id, parentSpanId, txHash and chainId)
-   * @returns AddSpanHintRequest
-   */
-  createAddSpanHintRequest({ traceId, parentSpanId, txHash, chainId }: { traceId: string, parentSpanId: string, txHash?: string, chainId?: number }): AddSpanHintRequest {
-    const hintReq = new AddSpanHintRequest();
-    hintReq.setTraceId(traceId);
-    hintReq.setParentSpanId(parentSpanId);
-
-    if (txHash && chainId !== undefined) {
-      const chainTxReq = new AddSpanHintRequest.ChainTransaction();
-      chainTxReq.setTxHash(txHash);
-      chainTxReq.setChainId(chainId);
-      hintReq.setChainTransaction(chainTxReq);
-    }
-    return hintReq;
-  }
-
-  /**
-   * Add a hint to a span
-   * @param params Parameters to add a hint to a span
-   */
-  async addSpanHint(params: AddSpanHintRequest): Promise<AddSpanHintResponse> {
-    try {
-      return await this.client.addSpanHint(params, null);
-    } catch (_error) {
-      debugIssue("addSpanHint", new Error('Error adding span hint'));
-      throw _error;
-    }
+    return this.client.createTrace(request);
   }
 }
 
-export { ParallaxClient };
+export { ParallaxClient, ParallaxTrace };

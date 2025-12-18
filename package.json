@@ -25,6 +25,7 @@
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-typescript": "^12.3.0",
+    "@types/google-protobuf": "^3.15.12",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.10.1",
     "eslint": "^9.39.1",
@@ -46,7 +47,7 @@
   "dependencies": {
     "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
-    "mirador-gateway-parallax-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/parallax/grpc-web/mirador-gateway-parallax-grpc-web-1.0.10.tgz",
+    "mirador-gateway-parallax-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/parallax/grpc-web/mirador-gateway-parallax-grpc-web-1.0.11.tgz",
     "rxjs": "^7.8.2"
   },
   "author": "@mirador",
