@@ -17,7 +17,7 @@ const GATEWAY_URL = 'https://parallax-gateway.dev.mirador.org:443';
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-grpc-web', 'x-user-agent', 'x-api-key'],
+  allowedHeaders: ['Content-Type', 'x-grpc-web', 'x-user-agent', 'x-parallax-api-key'],
   exposedHeaders: ['grpc-status', 'grpc-message'],
   credentials: true
 }));

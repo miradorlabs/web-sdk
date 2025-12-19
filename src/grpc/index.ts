@@ -52,7 +52,7 @@ export class GrpcWebRpc implements Rpc {
 
     // Add API key to headers if provided
     if (this.apiKey) {
-      headers['x-api-key'] = this.apiKey;
+      headers['x-parallax-api-key'] = this.apiKey;
     }
 
     // Add custom metadata
@@ -103,7 +103,7 @@ export class GrpcWebRpc implements Rpc {
 
       // Add API key to headers if provided
       if (this.apiKey) {
-        headers['x-api-key'] = this.apiKey;
+        headers['x-parallax-api-key'] = this.apiKey;
       }
 
       fetch(`${this.url}/${service}/${method}`, {

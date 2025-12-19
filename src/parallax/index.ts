@@ -23,7 +23,7 @@ class ParallaxClient {
     }
 
     // Create credentials object with API key if provided
-    const credentials = apiKey ? { 'x-api-key': apiKey } : undefined;
+    const credentials = apiKey ? { 'x-parallax-api-key': apiKey } : undefined;
 
     // Initialize the gRPC-Web client
     this.client = new ParallaxGatewayServiceClient(this.apiUrl, credentials);
