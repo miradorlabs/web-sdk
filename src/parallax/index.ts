@@ -14,16 +14,21 @@ const debugIssue = (trace: string, error: Error) => {
 }
 
 class ParallaxClient {
-  public apiUrl: string = GRPC_GATEWAY_API_URL;
+  public apiUrl: string;
+  public apiKey: string;
   private client: ParallaxGatewayServiceClient;
 
-  constructor(public apiKey?: string, apiUrl?: string) {
-    if (apiUrl) {
-      this.apiUrl = apiUrl;
-    }
+  /**
+   * Create a new ParallaxClient instance
+   * @param apiKey Required API key for authentication (sent as x-parallax-api-key header)
+   * @param apiUrl Optional gateway URL (defaults to parallax-gateway.dev.mirador.org:443)
+   */
+  constructor(apiKey: string, apiUrl?: string) {
+    this.apiKey = apiKey;
+    this.apiUrl = apiUrl || GRPC_GATEWAY_API_URL;
 
-    // Create credentials object with API key if provided
-    const credentials = apiKey ? { 'x-parallax-api-key': apiKey } : undefined;
+    // API key is required - always include in credentials
+    const credentials = { 'x-parallax-api-key': apiKey };
 
     // Initialize the gRPC-Web client
     this.client = new ParallaxGatewayServiceClient(this.apiUrl, credentials);
@@ -159,7 +164,8 @@ class ParallaxClient {
    */
   async createTrace(params: CreateTraceRequest): Promise<CreateTraceResponse> {
     try {
-      return await this.client.createTrace(params, null);
+      const metadata = { 'x-parallax-api-key': this.apiKey };
+      return await this.client.createTrace(params, metadata);
     } catch (_error) {
       debugIssue("createTrace", new Error('Error creating trace'));
       throw _error;
