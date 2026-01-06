@@ -25,7 +25,7 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 const client = new ParallaxClient('your-api-key');
 
 // Create and submit a trace using the builder pattern
-const response = await client.trace('SendTransaction', true)  // true = include client metadata
+const response = await client.trace('SendTransaction')  // client metadata included by default
   .addAttribute('from', userAddress)
   .addAttribute('to', recipientAddress)
   .addAttribute('value', amount)
@@ -61,13 +61,14 @@ new ParallaxClient(apiKey: string, apiUrl?: string)
 Creates a new trace builder.
 
 ```typescript
-const trace = client.trace('MyTrace', true);
+const trace = client.trace('MyTrace');  // client metadata included by default
+// Or explicitly disable: client.trace('MyTrace', false)
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | `string` | - | Name of the trace |
-| `includeClientMeta` | `boolean` | `false` | Include browser/OS metadata |
+| `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
 
 Returns: `ParallaxTrace` builder instance
 
@@ -81,11 +82,11 @@ const response = await client.createTrace(request);
 
 ##### `getClientMetadata()`
 
-Get collected client metadata.
+Get collected client metadata (synchronous).
 
 ```typescript
-const metadata = await client.getClientMetadata();
-// { browser: 'Chrome', os: 'macOS', ip: '...', ... }
+const metadata = client.getClientMetadata();
+// { browser: 'Chrome', browserVersion: '120', os: 'macOS', osVersion: '14.0', ... }
 ```
 
 ### ParallaxTrace (Builder)
@@ -163,8 +164,8 @@ const client = new ParallaxClient('your-api-key');
 
 async function handleWalletTransaction(userAddress: string, recipientAddress: string, amount: string) {
   try {
-    // Build trace with all transaction details
-    const response = await client.trace('SendETH', true)
+    // Build trace with all transaction details (client metadata included by default)
+    const response = await client.trace('SendETH')
       .addAttribute('from', userAddress)
       .addAttribute('to', recipientAddress)
       .addAttribute('value', amount)
@@ -185,7 +186,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
 
   } catch (error) {
     // Track failed transactions
-    await client.trace('SendETH_Error', true)
+    await client.trace('SendETH_Error')
       .addAttribute('from', userAddress)
       .addAttribute('errorType', error.name)
       .addAttribute('errorMessage', error.message)
@@ -208,18 +209,34 @@ When `includeClientMeta: true` is set, the SDK automatically collects:
 
 | Metadata | Description |
 |----------|-------------|
-| `client.browser` | Chrome, Firefox, Safari, Edge, etc. |
+| `client.browser` | Chrome, Firefox, Safari, Edge |
+| `client.browserVersion` | Browser version number |
 | `client.os` | Windows, macOS, Linux, Android, iOS |
+| `client.osVersion` | Operating system version |
+| `client.deviceType` | desktop, mobile, or tablet |
 | `client.userAgent` | Full user agent string |
-| `client.platform` | Browser platform |
-| `client.language` | Browser language |
+| `client.language` | Primary browser language |
+| `client.languages` | All preferred languages (comma-separated) |
 | `client.screenWidth` / `client.screenHeight` | Screen dimensions |
 | `client.viewportWidth` / `client.viewportHeight` | Viewport dimensions |
+| `client.colorDepth` | Screen color depth |
+| `client.pixelRatio` | Device pixel ratio (for retina displays) |
+| `client.cpuCores` | Number of CPU cores |
+| `client.deviceMemory` | Device memory in GB (if available) |
+| `client.touchSupport` | Whether touch is supported |
+| `client.connectionType` | Network connection type (4g, 3g, wifi, etc.) |
+| `client.cookiesEnabled` | Whether cookies are enabled |
+| `client.online` | Whether browser is online |
+| `client.doNotTrack` | Do Not Track preference |
 | `client.timezone` | User's timezone |
 | `client.timezoneOffset` | Timezone offset from UTC |
 | `client.url` | Current page URL |
+| `client.origin` | Page origin |
+| `client.pathname` | Page pathname |
 | `client.referrer` | Page referrer |
-| `client.ip` | Client IP (if not blocked by CSP) |
+| `client.documentVisibility` | Document visibility state |
+
+Note: IP address is captured by the backend from request headers.
 
 ## TypeScript Support
 

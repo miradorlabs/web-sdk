@@ -206,32 +206,40 @@ describe('ParallaxClient', () => {
   });
 
   describe('getClientMetadata()', () => {
-    it('should return browser metadata', async () => {
+    it('should return browser metadata', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
       expect(metadata.userAgent).toContain('Chrome');
-      expect(metadata.platform).toBe('MacIntel');
       expect(metadata.language).toBe('en-US');
     });
 
-    it('should detect browser type', async () => {
+    it('should detect browser type and version', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
       expect(metadata.browser).toBe('Chrome');
+      expect(metadata.browserVersion).toBeDefined();
     });
 
-    it('should detect OS', async () => {
+    it('should detect OS and version', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
       expect(metadata.os).toBe('macOS');
+      expect(metadata.osVersion).toBeDefined();
     });
 
-    it('should include screen dimensions', async () => {
+    it('should detect device type', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
+
+      expect(metadata.deviceType).toBe('desktop');
+    });
+
+    it('should include screen dimensions', () => {
+      const client = new ParallaxClient('test-key');
+      const metadata = client.getClientMetadata();
 
       expect(metadata.screenWidth).toBe('1920');
       expect(metadata.screenHeight).toBe('1080');
@@ -239,36 +247,45 @@ describe('ParallaxClient', () => {
       expect(metadata.viewportHeight).toBe('900');
     });
 
-    it('should include IP address when fetch succeeds', async () => {
+    it('should include display info', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
-      expect(metadata.ip).toBe('192.168.1.1');
+      expect(metadata.colorDepth).toBeDefined();
+      expect(metadata.pixelRatio).toBeDefined();
     });
 
-    it('should handle IP fetch failure gracefully', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
+    it('should include hardware capabilities', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
-      expect(metadata.ip).toBe('client_unavailable');
+      expect(metadata.cpuCores).toBeDefined();
+      expect(metadata.touchSupport).toBeDefined();
     });
 
-    it('should include timezone info', async () => {
+    it('should include browser state', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
+
+      expect(metadata.cookiesEnabled).toBeDefined();
+      expect(metadata.online).toBeDefined();
+    });
+
+    it('should include timezone info', () => {
+      const client = new ParallaxClient('test-key');
+      const metadata = client.getClientMetadata();
 
       expect(metadata.timezone).toBe('America/New_York');
       expect(metadata.timezoneOffset).toBeDefined();
     });
 
-    it('should include page info', async () => {
+    it('should include page context', () => {
       const client = new ParallaxClient('test-key');
-      const metadata = await client.getClientMetadata();
+      const metadata = client.getClientMetadata();
 
-      // URL will be the jsdom default if not mocked, but should exist
       expect(metadata.url).toBeDefined();
+      expect(metadata.origin).toBeDefined();
+      expect(metadata.pathname).toBeDefined();
       expect(metadata.referrer).toBeDefined();
     });
   });
@@ -480,8 +497,8 @@ describe('ParallaxTrace', () => {
       expect(txHint?.getChainId()).toBe('ethereum');
     });
 
-    it('should include client metadata when includeClientMeta is true', async () => {
-      await client.trace('TestTrace', true)
+    it('should include client metadata by default', async () => {
+      await client.trace('TestTrace')  // includeClientMeta defaults to true
         .addAttribute('custom', 'value')
         .submit();
 
@@ -496,7 +513,7 @@ describe('ParallaxTrace', () => {
       expect(attrsMap.get('client.os')).toBe('macOS');
     });
 
-    it('should not include client metadata when includeClientMeta is false', async () => {
+    it('should not include client metadata when explicitly disabled', async () => {
       await client.trace('TestTrace', false)
         .addAttribute('custom', 'value')
         .submit();
@@ -517,7 +534,7 @@ describe('ParallaxTrace', () => {
 
   describe('integration test', () => {
     it('should work with real usage pattern', async () => {
-      const response = await client.trace('SendTransaction', true)
+      const response = await client.trace('SendTransaction')  // client metadata included by default
         .addAttribute('from', '0xabc123')
         .addAttribute('to', '0xdef456')
         .addAttribute('value', '1.5')

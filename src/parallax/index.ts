@@ -35,89 +35,121 @@ class ParallaxClient {
   }
 
   /**
-   * Gather client metadata for traces/spans
+   * Gather client metadata for traces
    * Returns a metadata object with client environment details
-   * This includes browser, OS, screen size, IP address, and more
+   * Note: IP address is captured by the backend from request headers
    * @returns metadata
    */
-  async getClientMetadata(): Promise<{ [key: string]: string }> {
+  getClientMetadata(): { [key: string]: string } {
     const metadata: { [key: string]: string } = {};
-    // Browser info
-    metadata.userAgent = navigator.userAgent;
-    metadata.platform = navigator.platform;
-    metadata.language = navigator.language;
+    const ua = navigator.userAgent;
 
-    // Screen info
+    // Browser detection with version
+    if (ua.includes('Edg/')) {
+      metadata.browser = 'Edge';
+      metadata.browserVersion = ua.match(/Edg\/(\d+(\.\d+)?)/)?.[1] || 'unknown';
+    } else if (ua.includes('Chrome/')) {
+      metadata.browser = 'Chrome';
+      metadata.browserVersion = ua.match(/Chrome\/(\d+(\.\d+)?)/)?.[1] || 'unknown';
+    } else if (ua.includes('Firefox/')) {
+      metadata.browser = 'Firefox';
+      metadata.browserVersion = ua.match(/Firefox\/(\d+(\.\d+)?)/)?.[1] || 'unknown';
+    } else if (ua.includes('Safari/') && !ua.includes('Chrome')) {
+      metadata.browser = 'Safari';
+      metadata.browserVersion = ua.match(/Version\/(\d+(\.\d+)?)/)?.[1] || 'unknown';
+    } else {
+      metadata.browser = 'Unknown';
+      metadata.browserVersion = 'unknown';
+    }
+
+    // OS detection with version
+    if (ua.includes('Windows NT')) {
+      metadata.os = 'Windows';
+      const ntVersion = ua.match(/Windows NT (\d+\.\d+)/)?.[1];
+      metadata.osVersion = ntVersion === '10.0' ? '10/11' : ntVersion || 'unknown';
+    } else if (ua.includes('Mac OS X')) {
+      metadata.os = 'macOS';
+      metadata.osVersion = ua.match(/Mac OS X (\d+[._]\d+)/)?.[1]?.replace('_', '.') || 'unknown';
+    } else if (ua.includes('Android')) {
+      metadata.os = 'Android';
+      metadata.osVersion = ua.match(/Android (\d+(\.\d+)?)/)?.[1] || 'unknown';
+    } else if (ua.includes('iPhone') || ua.includes('iPad')) {
+      metadata.os = 'iOS';
+      metadata.osVersion = ua.match(/OS (\d+[._]\d+)/)?.[1]?.replace('_', '.') || 'unknown';
+    } else if (ua.includes('Linux')) {
+      metadata.os = 'Linux';
+      metadata.osVersion = 'unknown';
+    } else {
+      metadata.os = 'Unknown';
+      metadata.osVersion = 'unknown';
+    }
+
+    // Device type
+    if (/Mobile|Android|iPhone|iPad|iPod/i.test(ua)) {
+      metadata.deviceType = /iPad|Tablet/i.test(ua) ? 'tablet' : 'mobile';
+    } else {
+      metadata.deviceType = 'desktop';
+    }
+
+    // Core browser info
+    metadata.userAgent = ua;
+    metadata.language = navigator.language;
+    metadata.languages = navigator.languages?.join(',') || navigator.language;
+
+    // Screen and display
     metadata.screenWidth = window.screen.width.toString();
     metadata.screenHeight = window.screen.height.toString();
     metadata.viewportWidth = window.innerWidth.toString();
     metadata.viewportHeight = window.innerHeight.toString();
+    metadata.colorDepth = window.screen.colorDepth.toString();
+    metadata.pixelRatio = window.devicePixelRatio?.toString() || '1';
 
-    // Try to get IP address (non-blocking)
-    // Note: This may be blocked by Content Security Policy (CSP)
-    // If blocked, the backend should capture IP from request headers instead
-    try {
-      // Use ipify API (simple and fast JSON response)
-      const ipResponse: Response | Error = await fetch('https://api.ipify.org?format=json');
+    // Hardware capabilities
+    metadata.cpuCores = navigator.hardwareConcurrency?.toString() || 'unknown';
+    // deviceMemory is a non-standard Chrome API
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    if (nav.deviceMemory) {
+      metadata.deviceMemory = nav.deviceMemory.toString();
+    }
 
-      if (ipResponse && ipResponse.ok) {
-        const data = await ipResponse.json();
-        if (data && data.ip) {
-          metadata.ip = data.ip;
-        } else {
-          metadata.ip = 'client_unavailable';
-        }
-      } else {
-        metadata.ip = 'client_unavailable';
+    // Touch support
+    metadata.touchSupport = ('ontouchstart' in window || navigator.maxTouchPoints > 0).toString();
+    metadata.maxTouchPoints = navigator.maxTouchPoints?.toString() || '0';
+
+    // Connection info (Network Information API - non-standard)
+    interface NetworkInformation {
+      effectiveType?: string;
+      downlink?: number;
+      saveData?: boolean;
+    }
+    const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+    if (connection) {
+      metadata.connectionType = connection.effectiveType || 'unknown';
+      if (connection.downlink) {
+        metadata.connectionSpeed = connection.downlink.toString();
       }
-    } catch (error) {
-      // IP lookup failed (CSP block, timeout, or network error)
-      // This is expected if CSP blocks external requests
-      // Backend should capture IP from request headers instead
-      if (error instanceof Error && error.message.includes('Content Security Policy')) {
-        console.debug('IP fetch blocked by CSP - backend will capture from headers');
-      } else {
-        console.debug('Could not fetch IP address');
+      if (connection.saveData !== undefined) {
+        metadata.dataSaver = connection.saveData.toString();
       }
-      metadata.ip = 'client_unavailable';
     }
 
-    // Browser details (parse from user agent)
-    const ua = navigator.userAgent;
-    if (ua.includes('Chrome')) {
-      metadata.browser = 'Chrome';
-    } else if (ua.includes('Firefox')) {
-      metadata.browser = 'Firefox';
-    } else if (ua.includes('Safari')) {
-      metadata.browser = 'Safari';
-    } else if (ua.includes('Edge')) {
-      metadata.browser = 'Edge';
-    } else {
-      metadata.browser = 'Unknown';
-    }
-
-    // OS detection
-    if (ua.includes('Windows')) {
-      metadata.os = 'Windows';
-    } else if (ua.includes('Mac')) {
-      metadata.os = 'macOS';
-    } else if (ua.includes('Linux')) {
-      metadata.os = 'Linux';
-    } else if (ua.includes('Android')) {
-      metadata.os = 'Android';
-    } else if (ua.includes('iOS')) {
-      metadata.os = 'iOS';
-    } else {
-      metadata.os = 'Unknown';
-    }
+    // Browser state
+    metadata.cookiesEnabled = navigator.cookieEnabled.toString();
+    metadata.online = navigator.onLine.toString();
+    metadata.doNotTrack = navigator.doNotTrack || 'unspecified';
 
     // Timezone
     metadata.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     metadata.timezoneOffset = new Date().getTimezoneOffset().toString();
 
-    // Page info
+    // Page context
     metadata.url = window.location.href;
+    metadata.origin = window.location.origin;
+    metadata.pathname = window.location.pathname;
     metadata.referrer = document.referrer || 'direct';
+
+    // Document state
+    metadata.documentVisibility = document.visibilityState;
 
     return metadata;
   }
@@ -130,7 +162,7 @@ class ParallaxClient {
    * @param includeClientMeta optional flag to include client metadata (ip, browser, os, etc)
    * @returns a CreateTraceRequest object to be used for the createTrace request
    */
-  async createTraceRequest({name, tags, attr, includeClientMeta = false}: {name: string, tags?: string[], attr?: { [key: string]: string }, includeClientMeta?: boolean}): Promise<CreateTraceRequest> {
+  async createTraceRequest({name, tags, attr, includeClientMeta = true}: {name: string, tags?: string[], attr?: { [key: string]: string }, includeClientMeta?: boolean}): Promise<CreateTraceRequest> {
     const createTraceReq = new CreateTraceRequest();
     createTraceReq.setName(name);
     if (tags) {
@@ -148,7 +180,7 @@ class ParallaxClient {
       });
     }
     if (includeClientMeta) {
-      const clientMetadata = await this.getClientMetadata();
+      const clientMetadata = this.getClientMetadata();
       Object.entries(clientMetadata).forEach(([key, value]) => {
         traceAttrs.set(`client.${key}`, value);
       });
@@ -191,7 +223,7 @@ class ParallaxClient {
    * @param includeClientMeta Optional flag to automatically include client metadata
    * @returns A ParallaxTrace builder instance
    */
-  trace(name: string, includeClientMeta: boolean = false): ParallaxTrace {
+  trace(name: string, includeClientMeta: boolean = true): ParallaxTrace {
     return new ParallaxTrace(this, name, includeClientMeta);
   }
 
@@ -215,7 +247,7 @@ class ParallaxTrace {
   private client: ParallaxClient;
   private includeClientMeta: boolean;
 
-  constructor(client: ParallaxClient, name: string, includeClientMeta: boolean = false) {
+  constructor(client: ParallaxClient, name: string, includeClientMeta: boolean = true) {
     this.client = client;
     this.name = name;
     this.includeClientMeta = includeClientMeta;
@@ -339,7 +371,7 @@ class ParallaxTrace {
 
     // Add client metadata if requested
     if (this.includeClientMeta) {
-      const clientMetadata = await this.client.getClientMetadata();
+      const clientMetadata = this.client.getClientMetadata();
       for (const [key, value] of Object.entries(clientMetadata)) {
         attrsMap.set(`client.${key}`, value);
       }
