@@ -203,6 +203,85 @@ describe('ParallaxClient', () => {
         expect.any(Error)
       );
     });
+
+    // Happy-path API tests
+    it('should accept options object (happy-path API)', async () => {
+      const client = new ParallaxClient('test-key');
+
+      await client.createTrace({
+        name: 'HappyPathTrace',
+        tags: ['test', 'happy-path'],
+        attr: { key: 'value' },
+      });
+
+      expect(mockCreateTrace).toHaveBeenCalled();
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getName()).toBe('HappyPathTrace');
+      expect(request.getTagsList()).toEqual(['test', 'happy-path']);
+      expect(request.getAttributesMap().get('key')).toBe('value');
+    });
+
+    it('should include events via options API', async () => {
+      const client = new ParallaxClient('test-key');
+
+      await client.createTrace({
+        name: 'TraceWithEvents',
+        events: [
+          { name: 'event1', details: 'string details' },
+          { name: 'event2', details: { nested: 'object' } },
+        ],
+        includeClientMeta: false,
+      });
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const events = request.getEventsList();
+      expect(events.length).toBe(2);
+      expect(events[0].getEventName()).toBe('event1');
+      expect(events[0].getDetails()).toBe('string details');
+      expect(events[1].getEventName()).toBe('event2');
+      expect(events[1].getDetails()).toBe('{"nested":"object"}');
+    });
+
+    it('should include txHashHint via options API', async () => {
+      const client = new ParallaxClient('test-key');
+
+      await client.createTrace({
+        name: 'TraceWithTxHash',
+        txHashHint: { txHash: '0xabc123', chainId: '1', details: 'main tx' },
+        includeClientMeta: false,
+      });
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const txHint = request.getTxHashHint();
+      expect(txHint?.getTxHash()).toBe('0xabc123');
+      expect(txHint?.getChainId()).toBe('1');
+      expect(txHint?.getDetails()).toBe('main tx');
+    });
+
+    it('should throw error for empty name in options API', async () => {
+      const client = new ParallaxClient('test-key');
+
+      await expect(client.createTrace({ name: '' })).rejects.toThrow(
+        'Trace name is required and cannot be empty'
+      );
+
+      await expect(client.createTrace({ name: '   ' })).rejects.toThrow(
+        'Trace name is required and cannot be empty'
+      );
+    });
+
+    it('should stringify object attributes via options API', async () => {
+      const client = new ParallaxClient('test-key');
+
+      await client.createTrace({
+        name: 'ObjectAttrTrace',
+        attr: { data: { nested: 'value', count: 42 } },
+        includeClientMeta: false,
+      });
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getAttributesMap().get('data')).toBe('{"nested":"value","count":42}');
+    });
   });
 
   describe('getClientMetadata()', () => {
@@ -331,6 +410,56 @@ describe('ParallaxClient', () => {
       expect(attrsMap.get('client.browser')).toBe('Chrome');
       expect(attrsMap.get('client.os')).toBe('macOS');
     });
+
+    it('should preserve client.* attributes from user', async () => {
+      const client = new ParallaxClient('test-key');
+      const request = await client.createTraceRequest({
+        name: 'TestTrace',
+        attr: { 'client.custom': 'user-value' },
+        includeClientMeta: true,
+      });
+
+      const attrsMap = request.getAttributesMap();
+      expect(attrsMap.get('client.custom')).toBe('user-value');
+    });
+
+    it('should allow user to override client metadata', async () => {
+      const client = new ParallaxClient('test-key');
+      const request = await client.createTraceRequest({
+        name: 'TestTrace',
+        attr: { 'client.browser': 'CustomBrowser' },
+        includeClientMeta: true,
+      });
+
+      const attrsMap = request.getAttributesMap();
+      // User attrs override auto-collected client metadata
+      expect(attrsMap.get('client.browser')).toBe('CustomBrowser');
+    });
+
+    it('should stringify object attribute values', async () => {
+      const client = new ParallaxClient('test-key');
+      const request = await client.createTraceRequest({
+        name: 'TestTrace',
+        attr: { data: { nested: 'value' } },
+        includeClientMeta: false,
+      });
+
+      const attrsMap = request.getAttributesMap();
+      expect(attrsMap.get('data')).toBe('{"nested":"value"}');
+    });
+
+    it('should stringify number and boolean attribute values', async () => {
+      const client = new ParallaxClient('test-key');
+      const request = await client.createTraceRequest({
+        name: 'TestTrace',
+        attr: { count: 42, enabled: true },
+        includeClientMeta: false,
+      });
+
+      const attrsMap = request.getAttributesMap();
+      expect(attrsMap.get('count')).toBe('42');
+      expect(attrsMap.get('enabled')).toBe('true');
+    });
   });
 });
 
@@ -407,6 +536,37 @@ describe('ParallaxTrace', () => {
 
       expect(result).toBe(trace);
     });
+
+    it('addAttribute() should accept and stringify objects', () => {
+      const trace = client.trace('TestTrace');
+      const result = trace.addAttribute('data', { nested: 'value', count: 42 });
+
+      expect(result).toBe(trace);
+    });
+
+    it('addAttributes() should accept and stringify objects', () => {
+      const trace = client.trace('TestTrace');
+      const result = trace.addAttributes({
+        simple: 'string',
+        complex: { nested: true },
+      });
+
+      expect(result).toBe(trace);
+    });
+  });
+
+  describe('validation', () => {
+    it('should throw error for empty name', () => {
+      expect(() => client.trace('')).toThrow(
+        'Trace name is required and cannot be empty'
+      );
+    });
+
+    it('should throw error for whitespace-only name', () => {
+      expect(() => client.trace('   ')).toThrow(
+        'Trace name is required and cannot be empty'
+      );
+    });
   });
 
   describe('method chaining', () => {
@@ -439,6 +599,20 @@ describe('ParallaxTrace', () => {
       const attrsMap = request.getAttributesMap();
       expect(attrsMap.get('key1')).toBe('value1');
       expect(attrsMap.get('key2')).toBe('value2');
+    });
+
+    it('should stringify object attributes in request', async () => {
+      await client.trace('TestTrace', false)
+        .addAttribute('config', { timeout: 5000, retries: 3 })
+        .addAttributes({ data: { nested: 'value' }, count: 42 })
+        .submit();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const attrsMap = request.getAttributesMap();
+
+      expect(attrsMap.get('config')).toBe('{"timeout":5000,"retries":3}');
+      expect(attrsMap.get('data')).toBe('{"nested":"value"}');
+      expect(attrsMap.get('count')).toBe('42');
     });
 
     it('should include tags in request', async () => {

@@ -23,16 +23,41 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 
 // API key is required, gateway URL is optional
 const client = new ParallaxClient('your-api-key');
+```
 
-// Create and submit a trace using the builder pattern
-const response = await client.trace('SendTransaction')  // client metadata included by default
-  .addAttribute('from', userAddress)
-  .addAttribute('to', recipientAddress)
-  .addAttribute('value', amount)
-  .addTags(['transaction', 'ethereum'])
-  .addEvent('wallet_connected', { wallet: 'MetaMask' })
-  .addEvent('transaction_sent', { txHash, success: true })
-  .submit(txHash, '1');  // txHash, chainId
+### Simple API (Recommended)
+
+For most use cases, use the happy-path `createTrace()` method:
+
+```typescript
+const response = await client.createTrace({
+  name: 'UserAction',
+  attr: { userId: '123', action: 'click', data: { nested: 'value' } },
+  tags: ['ui', 'interaction'],
+  events: [
+    { name: 'button_clicked', details: { buttonId: 'submit' } },
+  ],
+  txHashHint: {
+    txHash: '0xabc123...',
+    chainId: '1',
+  },
+});
+
+console.log('Trace ID:', response.getTraceId());
+```
+
+### Builder Pattern (Advanced)
+
+For complex traces or when you need fine-grained control:
+
+```typescript
+const response = await client.trace('SwapExecution')
+  .addAttribute('from', '0xabc...')
+  .addAttribute('slippage', { bps: 50, tolerance: 'auto' })  // objects are stringified
+  .addTags(['dex', 'swap'])
+  .addEvent('quote_received', { provider: 'Uniswap' })
+  .addEvent('transaction_signed')
+  .submit('0xtxhash...', '1');  // txHash, chainId
 
 console.log('Trace ID:', response.getTraceId());
 ```
@@ -72,11 +97,37 @@ const trace = client.trace('MyTrace');  // client metadata included by default
 
 Returns: `ParallaxTrace` builder instance
 
-##### `createTrace(request)`
+##### `createTrace(options)` (Recommended)
 
-Low-level method to send a `CreateTraceRequest` directly.
+Create and submit a trace in one call:
 
 ```typescript
+const response = await client.createTrace({
+  name: 'MyTrace',
+  tags: ['tag1', 'tag2'],
+  attr: { key: 'value', data: { nested: true } },
+  events: [{ name: 'event1', details: { foo: 'bar' } }],
+  txHashHint: { txHash: '0x...', chainId: '1' },
+  includeClientMeta: true,  // default
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | - | **Required.** Name of the trace |
+| `tags` | `string[]` | `[]` | Tags for categorization |
+| `attr` | `object` | `{}` | Attributes (objects are stringified) |
+| `events` | `TraceEventInput[]` | `[]` | Events with name, details, timestamp |
+| `txHashHint` | `TxHashHintInput` | - | Transaction hash correlation |
+| `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
+
+##### `createTrace(request)` (Advanced)
+
+Low-level method to send a `CreateTraceRequest` directly:
+
+```typescript
+const request = new CreateTraceRequest();
+request.setName('MyTrace');
 const response = await client.createTrace(request);
 ```
 
@@ -95,22 +146,24 @@ Fluent builder for constructing traces. All methods return `this` for chaining.
 
 #### `addAttribute(key, value)`
 
-Add a single attribute.
+Add a single attribute. Objects are automatically stringified.
 
 ```typescript
 trace.addAttribute('user', '0xabc...')
-     .addAttribute('amount', '1.5')
+     .addAttribute('amount', 1.5)
+     .addAttribute('config', { slippage: 50, deadline: 300 })  // stringified to JSON
 ```
 
 #### `addAttributes(attrs)`
 
-Add multiple attributes at once.
+Add multiple attributes at once. Objects are automatically stringified.
 
 ```typescript
 trace.addAttributes({
   from: '0xabc...',
   to: '0xdef...',
-  value: '1.0'
+  value: 1.0,
+  metadata: { source: 'web', version: '1.0' }  // stringified to JSON
 })
 ```
 
