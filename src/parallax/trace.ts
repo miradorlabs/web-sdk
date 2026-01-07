@@ -8,6 +8,7 @@ import {
   TxHashHint as TxHashHintProto,
   Chain,
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+import { ResponseStatus } from 'mirador-gateway-parallax-web/proto/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import type { TraceEvent, TxHashHint, ChainName } from './types';
 import { getClientMetadata } from './metadata';
@@ -194,8 +195,7 @@ export class ParallaxTrace {
       const response = await this.client._sendTrace(request);
       const status = response.getStatus();
 
-      // STATUS_CODE_SUCCESS = 1
-      if (status?.getCode() !== 1) {
+      if (status?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         console.log('[ParallaxTrace] Error:', status?.getErrorMessage() || 'Unknown error');
         return undefined;
       }
