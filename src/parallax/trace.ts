@@ -4,10 +4,25 @@
 import {
   CreateTraceRequest,
   CreateTraceResponse,
+  Event,
+  TxHashHint as TxHashHintProto,
+  Chain,
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import type { TraceEvent, TxHashHint } from './types';
+import type { TraceEvent, TxHashHint, ChainName } from './types';
 import { getClientMetadata } from './metadata';
+
+/**
+ * Maps chain names to proto Chain enum values
+ */
+const CHAIN_MAP: Record<ChainName, Chain> = {
+  ethereum: Chain.CHAIN_ETHEREUM,
+  polygon: Chain.CHAIN_POLYGON,
+  arbitrum: Chain.CHAIN_ARBITRUM,
+  base: Chain.CHAIN_BASE,
+  optimism: Chain.CHAIN_OPTIMISM,
+  bsc: Chain.CHAIN_BSC,
+};
 
 /**
  * Interface for the client that ParallaxTrace uses to submit traces
@@ -29,10 +44,7 @@ export class ParallaxTrace {
   private client: TraceSubmitter;
   private includeClientMeta: boolean;
 
-  constructor(client: TraceSubmitter, name: string, includeClientMeta: boolean = true) {
-    if (!name || name.trim() === '') {
-      throw new Error('Trace name is required and cannot be empty');
-    }
+  constructor(client: TraceSubmitter, name: string = '', includeClientMeta: boolean = true) {
     this.client = client;
     this.name = name;
     this.includeClientMeta = includeClientMeta;
@@ -108,47 +120,27 @@ export class ParallaxTrace {
   }
 
   /**
-   * Set or update the transaction hash hint
+   * Set the transaction hash hint for blockchain correlation
    * @param txHash Transaction hash
-   * @param chainId Chain ID (e.g., "ethereum", "polygon")
+   * @param chain Chain name (e.g., "ethereum", "polygon", "base")
    * @param details Optional details about the transaction
-   * @param timestamp Optional timestamp (defaults to current time)
    * @returns This trace builder for chaining
    */
-  setTxHash(txHash: string, chainId: string, details?: string, timestamp?: Date): this {
+  setTxHint(txHash: string, chain: ChainName, details?: string): this {
     this.txHashHint = {
       txHash,
-      chainId,
+      chain,
       details,
-      timestamp: timestamp || new Date(),
+      timestamp: new Date(),
     };
     return this;
   }
 
   /**
-   * Submit the trace without a transaction hash hint (if not already set via setTxHash)
+   * Create and submit the trace to the gateway
    * @returns Response from the create trace operation
    */
-  async submit(): Promise<CreateTraceResponse>;
-
-  /**
-   * Submit the trace with a transaction hash hint (overrides any previously set via setTxHash)
-   * @param txHash Transaction hash
-   * @param chainId Chain ID (e.g., "ethereum", "polygon")
-   * @param details Optional details about the transaction
-   * @returns Response from the create trace operation
-   */
-  async submit(txHash: string, chainId: string, details?: string): Promise<CreateTraceResponse>;
-
-  async submit(txHash?: string, chainId?: string, details?: string): Promise<CreateTraceResponse> {
-    // If txHash and chainId are provided in submit(), they override any previously set txHashHint
-    const finalTxHashHint = txHash && chainId ? {
-      txHash,
-      chainId,
-      details,
-      timestamp: new Date(),
-    } : this.txHashHint;
-
+  async create(): Promise<CreateTraceResponse> {
     // Build the CreateTraceRequest
     const request = new CreateTraceRequest();
     request.setName(this.name);
@@ -169,10 +161,10 @@ export class ParallaxTrace {
     }
 
     // Add events
-    const eventsList: CreateTraceRequest.Event[] = [];
+    const eventsList: Event[] = [];
     for (const event of this.events) {
-      const eventMsg = new CreateTraceRequest.Event();
-      eventMsg.setEventName(event.eventName);
+      const eventMsg = new Event();
+      eventMsg.setName(event.eventName);
       if (event.details) {
         eventMsg.setDetails(event.details);
       }
@@ -184,15 +176,15 @@ export class ParallaxTrace {
     request.setEventsList(eventsList);
 
     // Add transaction hash hint if present
-    if (finalTxHashHint) {
-      const txHint = new CreateTraceRequest.TxHashHint();
-      txHint.setTxHash(finalTxHashHint.txHash);
-      txHint.setChainId(finalTxHashHint.chainId);
-      if (finalTxHashHint.details) {
-        txHint.setDetails(finalTxHashHint.details);
+    if (this.txHashHint) {
+      const txHint = new TxHashHintProto();
+      txHint.setTxHash(this.txHashHint.txHash);
+      txHint.setChain(CHAIN_MAP[this.txHashHint.chain]);
+      if (this.txHashHint.details) {
+        txHint.setDetails(this.txHashHint.details);
       }
       const timestamp = new Timestamp();
-      timestamp.fromDate(finalTxHashHint.timestamp);
+      timestamp.fromDate(this.txHashHint.timestamp);
       txHint.setTimestamp(timestamp);
       request.setTxHashHint(txHint);
     }

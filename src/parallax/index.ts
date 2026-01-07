@@ -13,10 +13,7 @@ export type {
   ClientMetadata,
   TraceEvent,
   TxHashHint,
-  TraceEventInput,
-  TxHashHintInput,
-  TraceAttributeValue,
-  CreateTraceOptions,
+  ChainName,
 } from './types';
 
 // Metadata utilities (for advanced usage)

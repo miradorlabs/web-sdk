@@ -1,7 +1,7 @@
 // ParallaxClient and ParallaxTrace Unit Tests
 import { ParallaxClient, ParallaxTrace } from '../src/parallax';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
-import { CreateTraceRequest, CreateTraceResponse } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+import { CreateTraceRequest, CreateTraceResponse, Chain } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 
 // Mock the gRPC-Web client
 jest.mock('mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb');
@@ -203,85 +203,6 @@ describe('ParallaxClient', () => {
         expect.any(Error)
       );
     });
-
-    // Happy-path API tests
-    it('should accept options object (happy-path API)', async () => {
-      const client = new ParallaxClient('test-key');
-
-      await client.createTrace({
-        name: 'HappyPathTrace',
-        tags: ['test', 'happy-path'],
-        attr: { key: 'value' },
-      });
-
-      expect(mockCreateTrace).toHaveBeenCalled();
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      expect(request.getName()).toBe('HappyPathTrace');
-      expect(request.getTagsList()).toEqual(['test', 'happy-path']);
-      expect(request.getAttributesMap().get('key')).toBe('value');
-    });
-
-    it('should include events via options API', async () => {
-      const client = new ParallaxClient('test-key');
-
-      await client.createTrace({
-        name: 'TraceWithEvents',
-        events: [
-          { name: 'event1', details: 'string details' },
-          { name: 'event2', details: { nested: 'object' } },
-        ],
-        includeClientMeta: false,
-      });
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const events = request.getEventsList();
-      expect(events.length).toBe(2);
-      expect(events[0].getEventName()).toBe('event1');
-      expect(events[0].getDetails()).toBe('string details');
-      expect(events[1].getEventName()).toBe('event2');
-      expect(events[1].getDetails()).toBe('{"nested":"object"}');
-    });
-
-    it('should include txHashHint via options API', async () => {
-      const client = new ParallaxClient('test-key');
-
-      await client.createTrace({
-        name: 'TraceWithTxHash',
-        txHashHint: { txHash: '0xabc123', chainId: '1', details: 'main tx' },
-        includeClientMeta: false,
-      });
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const txHint = request.getTxHashHint();
-      expect(txHint?.getTxHash()).toBe('0xabc123');
-      expect(txHint?.getChainId()).toBe('1');
-      expect(txHint?.getDetails()).toBe('main tx');
-    });
-
-    it('should throw error for empty name in options API', async () => {
-      const client = new ParallaxClient('test-key');
-
-      await expect(client.createTrace({ name: '' })).rejects.toThrow(
-        'Trace name is required and cannot be empty'
-      );
-
-      await expect(client.createTrace({ name: '   ' })).rejects.toThrow(
-        'Trace name is required and cannot be empty'
-      );
-    });
-
-    it('should stringify object attributes via options API', async () => {
-      const client = new ParallaxClient('test-key');
-
-      await client.createTrace({
-        name: 'ObjectAttrTrace',
-        attr: { data: { nested: 'value', count: 42 } },
-        includeClientMeta: false,
-      });
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      expect(request.getAttributesMap().get('data')).toBe('{"nested":"value","count":42}');
-    });
   });
 
   describe('getClientMetadata()', () => {
@@ -369,98 +290,6 @@ describe('ParallaxClient', () => {
     });
   });
 
-  describe('createTraceRequest()', () => {
-    it('should create request with name', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({ name: 'TestTrace' });
-
-      expect(request.getName()).toBe('TestTrace');
-    });
-
-    it('should add tags', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        tags: ['tag1', 'tag2'],
-      });
-
-      expect(request.getTagsList()).toEqual(['tag1', 'tag2']);
-    });
-
-    it('should add attributes', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        attr: { key1: 'value1', key2: 'value2' },
-      });
-
-      const attrsMap = request.getAttributesMap();
-      expect(attrsMap.get('key1')).toBe('value1');
-      expect(attrsMap.get('key2')).toBe('value2');
-    });
-
-    it('should include client metadata when requested', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        includeClientMeta: true,
-      });
-
-      const attrsMap = request.getAttributesMap();
-      expect(attrsMap.get('client.browser')).toBe('Chrome');
-      expect(attrsMap.get('client.os')).toBe('macOS');
-    });
-
-    it('should preserve client.* attributes from user', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        attr: { 'client.custom': 'user-value' },
-        includeClientMeta: true,
-      });
-
-      const attrsMap = request.getAttributesMap();
-      expect(attrsMap.get('client.custom')).toBe('user-value');
-    });
-
-    it('should allow user to override client metadata', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        attr: { 'client.browser': 'CustomBrowser' },
-        includeClientMeta: true,
-      });
-
-      const attrsMap = request.getAttributesMap();
-      // User attrs override auto-collected client metadata
-      expect(attrsMap.get('client.browser')).toBe('CustomBrowser');
-    });
-
-    it('should stringify object attribute values', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        attr: { data: { nested: 'value' } },
-        includeClientMeta: false,
-      });
-
-      const attrsMap = request.getAttributesMap();
-      expect(attrsMap.get('data')).toBe('{"nested":"value"}');
-    });
-
-    it('should stringify number and boolean attribute values', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = await client.createTraceRequest({
-        name: 'TestTrace',
-        attr: { count: 42, enabled: true },
-        includeClientMeta: false,
-      });
-
-      const attrsMap = request.getAttributesMap();
-      expect(attrsMap.get('count')).toBe('42');
-      expect(attrsMap.get('enabled')).toBe('true');
-    });
-  });
 });
 
 describe('ParallaxTrace', () => {
@@ -530,9 +359,9 @@ describe('ParallaxTrace', () => {
       expect(result).toBe(trace);
     });
 
-    it('setTxHash() should return this for chaining', () => {
+    it('setTxHint() should return this for chaining', () => {
       const trace = client.trace('TestTrace');
-      const result = trace.setTxHash('0x123', 'ethereum');
+      const result = trace.setTxHint('0x123', 'ethereum');
 
       expect(result).toBe(trace);
     });
@@ -555,17 +384,23 @@ describe('ParallaxTrace', () => {
     });
   });
 
-  describe('validation', () => {
-    it('should throw error for empty name', () => {
-      expect(() => client.trace('')).toThrow(
-        'Trace name is required and cannot be empty'
-      );
+  describe('optional name', () => {
+    it('should allow trace without name', async () => {
+      await client.trace()
+        .addAttribute('key', 'value')
+        .create();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getName()).toBe('');
     });
 
-    it('should throw error for whitespace-only name', () => {
-      expect(() => client.trace('   ')).toThrow(
-        'Trace name is required and cannot be empty'
-      );
+    it('should allow empty string as name', async () => {
+      await client.trace('')
+        .addAttribute('key', 'value')
+        .create();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getName()).toBe('');
     });
   });
 
@@ -579,18 +414,18 @@ describe('ParallaxTrace', () => {
         .addTags(['ethereum', 'send'])
         .addEvent('started')
         .addEvent('completed', { success: true })
-        .setTxHash('0x123', '1');
+        .setTxHint('0x123', 'ethereum');
 
       expect(trace).toBeInstanceOf(ParallaxTrace);
     });
   });
 
-  describe('submit()', () => {
+  describe('create()', () => {
     it('should create CreateTraceRequest with attributes', async () => {
       await client.trace('TestTrace')
         .addAttribute('key1', 'value1')
         .addAttribute('key2', 'value2')
-        .submit();
+        .create();
 
       expect(mockCreateTrace).toHaveBeenCalled();
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
@@ -605,7 +440,7 @@ describe('ParallaxTrace', () => {
       await client.trace('TestTrace', false)
         .addAttribute('config', { timeout: 5000, retries: 3 })
         .addAttributes({ data: { nested: 'value' }, count: 42 })
-        .submit();
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const attrsMap = request.getAttributesMap();
@@ -618,7 +453,7 @@ describe('ParallaxTrace', () => {
     it('should include tags in request', async () => {
       await client.trace('TestTrace')
         .addTags(['tag1', 'tag2', 'tag3'])
-        .submit();
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       expect(request.getTagsList()).toEqual(['tag1', 'tag2', 'tag3']);
@@ -628,53 +463,41 @@ describe('ParallaxTrace', () => {
       await client.trace('TestTrace')
         .addEvent('event1', 'details1')
         .addEvent('event2', { key: 'value' })
-        .submit();
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const events = request.getEventsList();
       expect(events.length).toBe(2);
-      expect(events[0].getEventName()).toBe('event1');
-      expect(events[1].getEventName()).toBe('event2');
+      expect(events[0].getName()).toBe('event1');
+      expect(events[1].getName()).toBe('event2');
     });
 
-    it('should include txHashHint when set via setTxHash()', async () => {
+    it('should include txHashHint when set via setTxHint()', async () => {
       await client.trace('TestTrace')
-        .setTxHash('0xabc123', 'ethereum', 'transaction details')
-        .submit();
+        .setTxHint('0xabc123', 'ethereum', 'transaction details')
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const txHint = request.getTxHashHint();
       expect(txHint).toBeDefined();
       expect(txHint?.getTxHash()).toBe('0xabc123');
-      expect(txHint?.getChainId()).toBe('ethereum');
+      expect(txHint?.getChain()).toBe(Chain.CHAIN_ETHEREUM);
     });
 
-    it('should include txHashHint when passed to submit()', async () => {
+    it('should support different chain names', async () => {
       await client.trace('TestTrace')
-        .submit('0xdef456', '1');
+        .setTxHint('0xabc123', 'polygon')
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const txHint = request.getTxHashHint();
-      expect(txHint).toBeDefined();
-      expect(txHint?.getTxHash()).toBe('0xdef456');
-      expect(txHint?.getChainId()).toBe('1');
-    });
-
-    it('submit() params should override setTxHash()', async () => {
-      await client.trace('TestTrace')
-        .setTxHash('0xoriginal', 'polygon')
-        .submit('0xoverride', 'ethereum');
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const txHint = request.getTxHashHint();
-      expect(txHint?.getTxHash()).toBe('0xoverride');
-      expect(txHint?.getChainId()).toBe('ethereum');
+      expect(txHint?.getChain()).toBe(Chain.CHAIN_POLYGON);
     });
 
     it('should include client metadata by default', async () => {
       await client.trace('TestTrace')  // includeClientMeta defaults to true
         .addAttribute('custom', 'value')
-        .submit();
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const attrsMap = request.getAttributesMap();
@@ -690,7 +513,7 @@ describe('ParallaxTrace', () => {
     it('should not include client metadata when explicitly disabled', async () => {
       await client.trace('TestTrace', false)
         .addAttribute('custom', 'value')
-        .submit();
+        .create();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const attrsMap = request.getAttributesMap();
@@ -700,9 +523,18 @@ describe('ParallaxTrace', () => {
     });
 
     it('should return response from createTrace', async () => {
-      const response = await client.trace('TestTrace').submit();
+      const response = await client.trace('TestTrace').create();
 
       expect(response.getTraceId()).toBe('trace-456');
+    });
+
+    it('should work without txHashHint', async () => {
+      await client.trace('TestTrace')
+        .addAttribute('key', 'value')
+        .create();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getTxHashHint()).toBeUndefined();
     });
   });
 
@@ -717,7 +549,8 @@ describe('ParallaxTrace', () => {
         .addEvent('wallet_connected', { wallet: 'MetaMask' })
         .addEvent('transaction_initiated')
         .addEvent('transaction_sent', { blockNumber: 12345 })
-        .submit('0xtxhash123', '1');
+        .setTxHint('0xtxhash123', 'ethereum')
+        .create();
 
       expect(response.getTraceId()).toBe('trace-456');
       expect(mockCreateTrace).toHaveBeenCalledTimes(1);
@@ -727,6 +560,7 @@ describe('ParallaxTrace', () => {
       expect(request.getTagsList()).toEqual(['transaction', 'send', 'ethereum']);
       expect(request.getEventsList().length).toBe(3);
       expect(request.getTxHashHint()?.getTxHash()).toBe('0xtxhash123');
+      expect(request.getTxHashHint()?.getChain()).toBe(Chain.CHAIN_ETHEREUM);
 
       const attrsMap = request.getAttributesMap();
       expect(attrsMap.get('from')).toBe('0xabc123');

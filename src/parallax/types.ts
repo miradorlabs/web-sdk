@@ -57,46 +57,17 @@ export interface TraceEvent {
 }
 
 /**
+ * Supported chain names (maps to Chain enum in proto)
+ */
+export type ChainName = 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc';
+
+/**
  * Transaction hash hint for blockchain correlation
  */
 export interface TxHashHint {
   txHash: string;
-  chainId: string;
+  chain: ChainName;
   details?: string;
   timestamp: Date;
 }
 
-/**
- * Event input for the happy-path createTrace API
- */
-export interface TraceEventInput {
-  name: string;
-  details?: string | object;
-  timestamp?: Date;
-}
-
-/**
- * Transaction hash hint input for the happy-path createTrace API
- */
-export interface TxHashHintInput {
-  txHash: string;
-  chainId: string;
-  details?: string;
-}
-
-/**
- * Attribute value type - accepts primitives and objects (objects are stringified)
- */
-export type TraceAttributeValue = string | number | boolean | object;
-
-/**
- * Options for creating a trace (happy-path API)
- */
-export interface CreateTraceOptions {
-  name: string;
-  tags?: string[];
-  attr?: { [key: string]: TraceAttributeValue };
-  events?: TraceEventInput[];
-  txHashHint?: TxHashHintInput;
-  includeClientMeta?: boolean;
-}

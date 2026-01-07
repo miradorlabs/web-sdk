@@ -10,8 +10,8 @@ npm install @miradorlabs/parallax-web
 
 ## Features
 
-- **Simple Builder Pattern** - Fluent API for creating traces with method chaining
-- **Browser-optimized** - Automatic client metadata collection (browser, OS, IP, etc.)
+- **Fluent Builder Pattern** - Method chaining for creating traces
+- **Browser-optimized** - Automatic client metadata collection (browser, OS, etc.)
 - **Blockchain Integration** - Built-in support for correlating traces with blockchain transactions
 - **TypeScript Support** - Full type definitions included
 - **Single Request** - All trace data submitted in one efficient gRPC call
@@ -23,41 +23,16 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 
 // API key is required, gateway URL is optional
 const client = new ParallaxClient('your-api-key');
-```
 
-### Simple API (Recommended)
-
-For most use cases, use the happy-path `createTrace()` method:
-
-```typescript
-const response = await client.createTrace({
-  name: 'UserAction',
-  attr: { userId: '123', action: 'click', data: { nested: 'value' } },
-  tags: ['ui', 'interaction'],
-  events: [
-    { name: 'button_clicked', details: { buttonId: 'submit' } },
-  ],
-  txHashHint: {
-    txHash: '0xabc123...',
-    chainId: '1',
-  },
-});
-
-console.log('Trace ID:', response.getTraceId());
-```
-
-### Builder Pattern (Advanced)
-
-For complex traces or when you need fine-grained control:
-
-```typescript
+// Create and submit a trace
 const response = await client.trace('SwapExecution')
   .addAttribute('from', '0xabc...')
   .addAttribute('slippage', { bps: 50, tolerance: 'auto' })  // objects are stringified
   .addTags(['dex', 'swap'])
   .addEvent('quote_received', { provider: 'Uniswap' })
   .addEvent('transaction_signed')
-  .submit('0xtxhash...', '1');  // txHash, chainId
+  .setTxHint('0xtxhash...', 'ethereum')  // optional
+  .create();
 
 console.log('Trace ID:', response.getTraceId());
 ```
@@ -81,55 +56,22 @@ new ParallaxClient(apiKey: string, apiUrl?: string)
 
 #### Methods
 
-##### `trace(name, includeClientMeta?)`
+##### `trace(name?, includeClientMeta?)`
 
 Creates a new trace builder.
 
 ```typescript
 const trace = client.trace('MyTrace');  // client metadata included by default
-// Or explicitly disable: client.trace('MyTrace', false)
+const trace = client.trace();           // name is optional (defaults to empty string)
+// Or explicitly disable client metadata: client.trace('MyTrace', false)
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | `string` | - | Name of the trace |
+| `name` | `string` | `''` | Optional name of the trace |
 | `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
 
 Returns: `ParallaxTrace` builder instance
-
-##### `createTrace(options)` (Recommended)
-
-Create and submit a trace in one call:
-
-```typescript
-const response = await client.createTrace({
-  name: 'MyTrace',
-  tags: ['tag1', 'tag2'],
-  attr: { key: 'value', data: { nested: true } },
-  events: [{ name: 'event1', details: { foo: 'bar' } }],
-  txHashHint: { txHash: '0x...', chainId: '1' },
-  includeClientMeta: true,  // default
-});
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | - | **Required.** Name of the trace |
-| `tags` | `string[]` | `[]` | Tags for categorization |
-| `attr` | `object` | `{}` | Attributes (objects are stringified) |
-| `events` | `TraceEventInput[]` | `[]` | Events with name, details, timestamp |
-| `txHashHint` | `TxHashHintInput` | - | Transaction hash correlation |
-| `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
-
-##### `createTrace(request)` (Advanced)
-
-Low-level method to send a `CreateTraceRequest` directly:
-
-```typescript
-const request = new CreateTraceRequest();
-request.setName('MyTrace');
-const response = await client.createTrace(request);
-```
 
 ##### `getClientMetadata()`
 
@@ -186,24 +128,26 @@ trace.addEvent('wallet_connected', { wallet: 'MetaMask' })
      .addEvent('transaction_confirmed', { blockNumber: 12345 })
 ```
 
-#### `setTxHash(txHash, chainId, details?)`
+#### `setTxHint(txHash, chain, details?)`
 
-Set the transaction hash hint (can also be set in `submit()`).
+Set the transaction hash hint for blockchain correlation.
 
 ```typescript
-trace.setTxHash('0x123...', '1', 'Main transaction')
+trace.setTxHint('0x123...', 'ethereum', 'Main transaction')
 ```
 
-#### `submit(txHash?, chainId?)`
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `txHash` | `string` | Transaction hash |
+| `chain` | `ChainName` | Chain name: 'ethereum' \| 'polygon' \| 'arbitrum' \| 'base' \| 'optimism' \| 'bsc' |
+| `details` | `string` | Optional details about the transaction |
 
-Submit the trace to the gateway. Optionally include transaction hash (overrides `setTxHash()`).
+#### `create()`
+
+Submit the trace to the gateway.
 
 ```typescript
-// Without transaction hash
-const response = await trace.submit();
-
-// With transaction hash
-const response = await trace.submit('0x123...', '1');
+const response = await trace.create();
 ```
 
 Returns: `Promise<CreateTraceResponse>`
@@ -233,7 +177,8 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
         gasUsed: receipt.gasUsed,
         success: true
       })
-      .submit(receipt.hash, '1');
+      .setTxHint(receipt.hash, 'ethereum')
+      .create();
 
     console.log('Trace ID:', response.getTraceId());
 
@@ -249,7 +194,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
         error: error.message,
         stack: error.stack
       })
-      .submit();
+      .create();
 
     throw error;
   }
@@ -301,6 +246,7 @@ import {
   ParallaxTrace,
   CreateTraceRequest,
   CreateTraceResponse,
+  ChainName,  // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
 } from '@miradorlabs/parallax-web';
 ```
 
