@@ -25,7 +25,7 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 const client = new ParallaxClient('your-api-key');
 
 // Create and submit a trace
-const response = await client.trace('SwapExecution')
+const traceId = await client.trace('SwapExecution')
   .addAttribute('from', '0xabc...')
   .addAttribute('slippage', { bps: 50, tolerance: 'auto' })  // objects are stringified
   .addTags(['dex', 'swap'])
@@ -34,7 +34,7 @@ const response = await client.trace('SwapExecution')
   .setTxHint('0xtxhash...', 'ethereum')  // optional
   .create();
 
-console.log('Trace ID:', response.getTraceId());
+console.log('Trace ID:', traceId);
 ```
 
 ## API Reference
@@ -138,10 +138,10 @@ trace.setTxHint('0x123...', 'ethereum', 'Main transaction')
 Submit the trace to the gateway.
 
 ```typescript
-const response = await trace.create();
+const traceId = await trace.create();
 ```
 
-Returns: `Promise<CreateTraceResponse>`
+Returns: `Promise<string | undefined>` - The trace ID if successful, undefined if failed
 
 ## Complete Example: Transaction Tracking
 
@@ -151,43 +151,27 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 const client = new ParallaxClient('your-api-key');
 
 async function handleWalletTransaction(userAddress: string, recipientAddress: string, amount: string) {
-  try {
-    // Build trace with all transaction details (client metadata included by default)
-    const response = await client.trace('SendETH')
-      .addAttribute('from', userAddress)
-      .addAttribute('to', recipientAddress)
-      .addAttribute('value', amount)
-      .addAttribute('network', 'ethereum')
-      .addTags(['transaction', 'send', 'ethereum'])
-      .addEvent('wallet_connected', { wallet: 'MetaMask' })
-      .addEvent('transaction_initiated')
-      .addEvent('user_signed')
-      .addEvent('transaction_sent', {
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed,
-        success: true
-      })
-      .setTxHint(receipt.hash, 'ethereum')
-      .create();
+  // Build trace with all transaction details (client metadata included by default)
+  const traceId = await client.trace('SendETH')
+    .addAttribute('from', userAddress)
+    .addAttribute('to', recipientAddress)
+    .addAttribute('value', amount)
+    .addAttribute('network', 'ethereum')
+    .addTags(['transaction', 'send', 'ethereum'])
+    .addEvent('wallet_connected', { wallet: 'MetaMask' })
+    .addEvent('transaction_initiated')
+    .addEvent('user_signed')
+    .addEvent('transaction_sent', {
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed,
+      success: true
+    })
+    .setTxHint(receipt.hash, 'ethereum')
+    .create();
 
-    console.log('Trace ID:', response.getTraceId());
-
-  } catch (error) {
-    // Track failed transactions
-    await client.trace('SendETH_Error')
-      .addAttribute('from', userAddress)
-      .addAttribute('errorType', error.name)
-      .addAttribute('errorMessage', error.message)
-      .addAttribute('success', 'false')
-      .addTags(['transaction', 'send', 'error'])
-      .addEvent('transaction_error', {
-        error: error.message,
-        stack: error.stack
-      })
-      .create();
-
-    throw error;
+  if (traceId) {
+    console.log('Trace ID:', traceId);
   }
 }
 ```
@@ -235,8 +219,6 @@ Full TypeScript support with exported types:
 import {
   ParallaxClient,
   ParallaxTrace,
-  CreateTraceRequest,
-  CreateTraceResponse,
   ChainName,  // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
 } from '@miradorlabs/parallax-web';
 ```

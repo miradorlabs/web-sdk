@@ -1,18 +1,11 @@
 /**
  * ParallaxClient - Main client for interacting with the Parallax Gateway
  */
-import {
-  CreateTraceRequest,
-  CreateTraceResponse,
-} from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+import { CreateTraceRequest } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
 import { ParallaxTrace } from './trace';
 
 const DEFAULT_API_URL = 'https://parallax-gateway.dev.mirador.org:443';
-
-const debugIssue = (trace: string, error: Error) => {
-  console.error(`[ParallaxClient][${trace}] Error:`, error);
-};
 
 /**
  * Main client for interacting with the Parallax Gateway API
@@ -39,18 +32,12 @@ export class ParallaxClient {
   }
 
   /**
-   * Send a CreateTraceRequest to the gateway
-   * @param request Pre-built CreateTraceRequest
-   * @returns Response from the create trace operation
+   * Internal method to send trace to gateway
+   * @internal
    */
-  async createTrace(request: CreateTraceRequest): Promise<CreateTraceResponse> {
-    try {
-      const metadata = { 'x-parallax-api-key': this.apiKey };
-      return await this.client.createTrace(request, metadata);
-    } catch (_error) {
-      debugIssue('createTrace', new Error('Error creating trace'));
-      throw _error;
-    }
+  async _sendTrace(request: CreateTraceRequest) {
+    const metadata = { 'x-parallax-api-key': this.apiKey };
+    return await this.client.createTrace(request, metadata);
   }
 
   /**

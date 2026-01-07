@@ -1,18 +1,15 @@
 // ParallaxClient and ParallaxTrace Unit Tests
 import { ParallaxClient, ParallaxTrace } from '../src/parallax';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
-import { CreateTraceRequest, CreateTraceResponse, Chain } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+import { CreateTraceRequest, Chain } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 
 // Mock the gRPC-Web client
 jest.mock('mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb');
 
-// Mock console.error to avoid cluttering test output
+// Mock console to avoid cluttering test output
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 const mockConsoleDebug = jest.spyOn(console, 'debug').mockImplementation();
-
-// Store original values
-const originalUserAgent = navigator.userAgent;
-const originalFetch = global.fetch;
+const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 
 // Mock fetch for IP lookup
 global.fetch = jest.fn();
@@ -41,7 +38,7 @@ beforeAll(() => {
   // Mock location - need to delete first in jsdom
   // @ts-ignore
   delete window.location;
-  window.location = { href: 'https://example.com/page' } as Location;
+  window.location = { href: 'https://example.com/page' } as unknown as Location;
 
   // Mock document.referrer - need to use a getter
   Object.defineProperty(document, 'referrer', {
@@ -54,6 +51,12 @@ beforeAll(() => {
     resolvedOptions: () => ({ timeZone: 'America/New_York' }),
   };
   jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => mockDateTimeFormat as any);
+});
+
+afterAll(() => {
+  mockConsoleError.mockRestore();
+  mockConsoleDebug.mockRestore();
+  mockConsoleLog.mockRestore();
 });
 
 describe('ParallaxClient', () => {
@@ -82,11 +85,7 @@ describe('ParallaxClient', () => {
   afterEach(() => {
     mockConsoleError.mockClear();
     mockConsoleDebug.mockClear();
-  });
-
-  afterAll(() => {
-    mockConsoleError.mockRestore();
-    mockConsoleDebug.mockRestore();
+    mockConsoleLog.mockClear();
   });
 
   describe('constructor', () => {
@@ -152,59 +151,6 @@ describe('ParallaxClient', () => {
       expect(trace).toBeInstanceOf(ParallaxTrace);
     });
   });
-
-  describe('createTrace()', () => {
-    it('should send CreateTraceRequest to gateway', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = new CreateTraceRequest();
-      request.setName('TestTrace');
-
-      await client.createTrace(request);
-
-      expect(mockCreateTrace).toHaveBeenCalledWith(
-        request,
-        { 'x-parallax-api-key': 'test-key' }
-      );
-    });
-
-    it('should include API key in metadata', async () => {
-      const client = new ParallaxClient('my-secret-key');
-      const request = new CreateTraceRequest();
-      request.setName('TestTrace');
-
-      await client.createTrace(request);
-
-      expect(mockCreateTrace).toHaveBeenCalledWith(
-        request,
-        { 'x-parallax-api-key': 'my-secret-key' }
-      );
-    });
-
-    it('should return response from gateway', async () => {
-      const client = new ParallaxClient('test-key');
-      const request = new CreateTraceRequest();
-      request.setName('TestTrace');
-
-      const response = await client.createTrace(request);
-
-      expect(response.getTraceId()).toBe('trace-123');
-    });
-
-    it('should handle errors and log appropriately', async () => {
-      mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
-
-      const client = new ParallaxClient('test-key');
-      const request = new CreateTraceRequest();
-      request.setName('TestTrace');
-
-      await expect(client.createTrace(request)).rejects.toThrow('Connection failed');
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        '[ParallaxClient][createTrace] Error:',
-        expect.any(Error)
-      );
-    });
-  });
-
 });
 
 describe('ParallaxTrace', () => {
@@ -437,10 +383,40 @@ describe('ParallaxTrace', () => {
       expect(attrsMap.get('client.browser')).toBeUndefined();
     });
 
-    it('should return response from createTrace', async () => {
-      const response = await client.trace('TestTrace').create();
+    it('should return traceId from create()', async () => {
+      const traceId = await client.trace('TestTrace').create();
 
-      expect(response.getTraceId()).toBe('trace-456');
+      expect(traceId).toBe('trace-456');
+    });
+
+    it('should return undefined and log on connection error', async () => {
+      mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
+
+      const traceId = await client.trace('TestTrace').create();
+
+      expect(traceId).toBeUndefined();
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        '[ParallaxTrace] Error creating trace:',
+        expect.any(Error)
+      );
+    });
+
+    it('should return undefined and log on status error', async () => {
+      mockCreateTrace.mockResolvedValue({
+        getTraceId: () => '',
+        getStatus: () => ({
+          getCode: () => 4, // INTERNAL_ERROR
+          getErrorMessage: () => 'Internal server error',
+        }),
+      });
+
+      const traceId = await client.trace('TestTrace').create();
+
+      expect(traceId).toBeUndefined();
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        '[ParallaxTrace] Error:',
+        'Internal server error'
+      );
     });
 
     it('should work without txHashHint', async () => {
@@ -455,7 +431,7 @@ describe('ParallaxTrace', () => {
 
   describe('integration test', () => {
     it('should work with real usage pattern', async () => {
-      const response = await client.trace('SendTransaction')  // client metadata included by default
+      const traceId = await client.trace('SendTransaction')  // client metadata included by default
         .addAttribute('from', '0xabc123')
         .addAttribute('to', '0xdef456')
         .addAttribute('value', '1.5')
@@ -467,7 +443,7 @@ describe('ParallaxTrace', () => {
         .setTxHint('0xtxhash123', 'ethereum')
         .create();
 
-      expect(response.getTraceId()).toBe('trace-456');
+      expect(traceId).toBe('trace-456');
       expect(mockCreateTrace).toHaveBeenCalledTimes(1);
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;

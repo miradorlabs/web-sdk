@@ -26,9 +26,10 @@ const CHAIN_MAP: Record<ChainName, Chain> = {
 
 /**
  * Interface for the client that ParallaxTrace uses to submit traces
+ * @internal
  */
 export interface TraceSubmitter {
-  createTrace(params: CreateTraceRequest): Promise<CreateTraceResponse>;
+  _sendTrace(request: CreateTraceRequest): Promise<CreateTraceResponse>;
 }
 
 /**
@@ -138,9 +139,9 @@ export class ParallaxTrace {
 
   /**
    * Create and submit the trace to the gateway
-   * @returns Response from the create trace operation
+   * @returns The trace ID if successful, undefined if failed
    */
-  async create(): Promise<CreateTraceResponse> {
+  async create(): Promise<string | undefined> {
     // Build the CreateTraceRequest
     const request = new CreateTraceRequest();
     request.setName(this.name);
@@ -189,6 +190,20 @@ export class ParallaxTrace {
       request.setTxHashHint(txHint);
     }
 
-    return this.client.createTrace(request);
+    try {
+      const response = await this.client._sendTrace(request);
+      const status = response.getStatus();
+
+      // STATUS_CODE_SUCCESS = 1
+      if (status?.getCode() !== 1) {
+        console.log('[ParallaxTrace] Error:', status?.getErrorMessage() || 'Unknown error');
+        return undefined;
+      }
+
+      return response.getTraceId();
+    } catch (error) {
+      console.log('[ParallaxTrace] Error creating trace:', error);
+      return undefined;
+    }
   }
 }
