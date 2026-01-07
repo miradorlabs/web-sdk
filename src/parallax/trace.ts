@@ -193,10 +193,10 @@ export class ParallaxTrace {
 
     try {
       const response = await this.client._sendTrace(request);
-      const status = response.getStatus();
+      const responseStatus = response.getStatus();
 
-      if (status?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        console.log('[ParallaxTrace] Error:', status?.getErrorMessage() || 'Unknown error');
+      if (responseStatus?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
+        console.log('[ParallaxTrace] Error:', responseStatus?.getErrorMessage() || 'Unknown error');
         return undefined;
       }
 
