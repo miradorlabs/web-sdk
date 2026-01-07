@@ -73,15 +73,6 @@ const trace = client.trace();           // name is optional (defaults to empty s
 
 Returns: `ParallaxTrace` builder instance
 
-##### `getClientMetadata()`
-
-Get collected client metadata (synchronous).
-
-```typescript
-const metadata = client.getClientMetadata();
-// { browser: 'Chrome', browserVersion: '120', os: 'macOS', osVersion: '14.0', ... }
-```
-
 ### ParallaxTrace (Builder)
 
 Fluent builder for constructing traces. All methods return `this` for chaining.

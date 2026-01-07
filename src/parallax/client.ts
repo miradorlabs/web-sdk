@@ -7,7 +7,6 @@ import {
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
 import { ParallaxTrace } from './trace';
-import { getClientMetadata } from './metadata';
 
 const DEFAULT_API_URL = 'https://parallax-gateway.dev.mirador.org:443';
 
@@ -37,16 +36,6 @@ export class ParallaxClient {
 
     // Initialize the gRPC-Web client
     this.client = new ParallaxGatewayServiceClient(this.apiUrl, credentials);
-  }
-
-  /**
-   * Gather client metadata for traces
-   * Returns a metadata object with client environment details
-   * Note: IP address is captured by the backend from request headers
-   * @returns metadata
-   */
-  getClientMetadata(): { [key: string]: string } {
-    return getClientMetadata();
   }
 
   /**
