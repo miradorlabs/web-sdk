@@ -1,8 +1,5 @@
-export * from './src/parallax';
-export { GrpcWebRpc } from './src/grpc';
-
-// Export ParallaxService
-export { ParallaxService, parallaxService } from './src/parallax/ParallaxService';
+// Core SDK exports
+export { ParallaxClient, ParallaxTrace } from './src/parallax';
 
 // Re-export proto types for convenience
 export {
