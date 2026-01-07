@@ -36,7 +36,7 @@ beforeAll(() => {
   Object.defineProperty(window.screen, 'height', { value: 1080, configurable: true });
 
   // Mock location - need to delete first in jsdom
-  // @ts-ignore
+  // @ts-expect-error - deleting window.location for test mocking
   delete window.location;
   window.location = { href: 'https://example.com/page' } as unknown as Location;
 
@@ -50,7 +50,7 @@ beforeAll(() => {
   const mockDateTimeFormat = {
     resolvedOptions: () => ({ timeZone: 'America/New_York' }),
   };
-  jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => mockDateTimeFormat as any);
+  jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => mockDateTimeFormat as unknown as Intl.DateTimeFormat);
 });
 
 afterAll(() => {
