@@ -11,7 +11,7 @@ const app = express();
 const PORT = 3001;
 
 // Target Parallax Gateway
-const GATEWAY_URL = 'https://parallax-gateway.dev.mirador.org:443';
+const GATEWAY_URL = 'https://parallax-gateway-dev.mirador.org:443';
 
 // Enable CORS for all origins (development only)
 app.use(cors({

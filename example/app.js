@@ -3,11 +3,11 @@ import { ParallaxClient } from '../dist/index.esm.js';
 
 // Initialize the client
 // Use proxy to avoid CORS issues (default)
-// To use direct connection, change to: 'https://parallax-gateway.dev.mirador.org:443'
+// To use direct connection, change to: 'https://parallax-gateway-dev.mirador.org:443'
 const USE_PROXY = true;
-const GATEWAY_URL = USE_PROXY 
+const GATEWAY_URL = USE_PROXY
   ? 'http://localhost:3001'  // Proxy server (no CORS issues)
-  : 'https://parallax-gateway.dev.mirador.org:443';  // Direct (may have CORS issues)
+  : 'https://parallax-gateway-dev.mirador.org:443';  // Direct (may have CORS issues)
 
 const client = new ParallaxClient('demo-api-key', GATEWAY_URL);
 

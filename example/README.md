@@ -184,7 +184,7 @@ By default, the demo connects to:
 ```javascript
 const client = new ParallaxClient(
   'demo-api-key',
-  'https://parallax-gateway.dev.mirador.org:443'
+  'https://parallax-gateway-dev.mirador.org:443'
 );
 ```
 

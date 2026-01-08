@@ -97,7 +97,7 @@ describe('ParallaxClient', () => {
 
     it('should use default gateway URL when not provided', () => {
       const client = new ParallaxClient('my-api-key');
-      expect(client.apiUrl).toBe('https://parallax-gateway.dev.mirador.org:443');
+      expect(client.apiUrl).toBe('https://parallax-gateway-dev.mirador.org:443');
     });
 
     it('should use custom gateway URL when provided', () => {
@@ -111,7 +111,7 @@ describe('ParallaxClient', () => {
       new ParallaxClient(apiKey);
 
       expect(ParallaxGatewayServiceClient).toHaveBeenCalledWith(
-        'https://parallax-gateway.dev.mirador.org:443',
+        'https://parallax-gateway-dev.mirador.org:443',
         { 'x-parallax-api-key': apiKey }
       );
     });
