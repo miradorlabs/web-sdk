@@ -447,6 +447,7 @@ describe('ParallaxTrace', () => {
       await jest.runAllTimersAsync();
 
       expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(trace.getTraceId()).toBe('trace-456');
     });
 
     it('should reset timer on each SDK call', async () => {
