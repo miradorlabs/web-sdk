@@ -61,14 +61,14 @@ trace.flush();  // → UpdateTrace
 
 ## Immediate Flush Mode
 
-Set `flushPeriod: 0` to flush immediately on every SDK call (no batching):
+Set `flushPeriodMs: 0` to flush immediately on every SDK call (no batching):
 
 ```typescript
 import { ParallaxClient } from '@miradorlabs/parallax-web';
 
 const client = new ParallaxClient('your-api-key');
 
-const trace = client.trace({ name: 'SwapExecution', flushPeriod: 0 })
+const trace = client.trace({ name: 'SwapExecution', flushPeriodMs: 0 })
   .addAttribute('from', '0xabc...');  // → CreateTrace sent immediately
 
 trace.addEvent('transaction_signed'); // → UpdateTrace sent immediately
@@ -109,14 +109,14 @@ Creates a new trace builder.
 ```typescript
 const trace = client.trace({ name: 'MyTrace' });
 const trace = client.trace({ name: 'MyTrace', autoFlush: false });
-const trace = client.trace({ autoFlush: false, flushPeriod: 100 });
+const trace = client.trace({ autoFlush: false, flushPeriodMs: 100 });
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | `string` | `undefined` | Optional name of the trace |
 | `autoFlush` | `boolean` | `true` | Auto-flush after period of inactivity |
-| `flushPeriod` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
+| `flushPeriodMs` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
 | `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |

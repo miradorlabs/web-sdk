@@ -3,15 +3,6 @@
  */
 
 /**
- * Configuration options for ParallaxClient
- * @deprecated Use ParallaxClientOptions instead
- */
-export interface ParallaxClientConfig {
-  apiKey: string;
-  apiUrl?: string;
-}
-
-/**
  * Options for ParallaxClient constructor
  */
 export interface ParallaxClientOptions {
@@ -28,7 +19,7 @@ export interface TraceOptions {
   /** Enable auto-flush mode (default: true) */
   autoFlush?: boolean;
   /** Debounce period in ms before auto-flush triggers (default: 50) */
-  flushPeriod?: number;
+  flushPeriodMs?: number;
   /** Include browser/OS metadata in first flush (default: true) */
   includeClientMeta?: boolean;
   /** Maximum number of retry attempts on failure (default: 3) */

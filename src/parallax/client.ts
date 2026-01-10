@@ -9,7 +9,13 @@ import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto
 import { ParallaxTrace } from './trace';
 import type { ParallaxClientOptions, TraceOptions } from './types';
 
+// Default configuration values
 const DEFAULT_API_URL = 'https://parallax-gateway-dev.mirador.org:443';
+const DEFAULT_AUTO_FLUSH = true;
+const DEFAULT_FLUSH_PERIOD_MS = 50;
+const DEFAULT_INCLUDE_CLIENT_META = true;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_BACKOFF = 1000;
 
 /**
  * Main client for interacting with the Parallax Gateway API
@@ -53,11 +59,11 @@ export class ParallaxClient {
   trace(options?: TraceOptions): ParallaxTrace {
     return new ParallaxTrace(this, {
       name: options?.name,
-      autoFlush: options?.autoFlush ?? true,
-      flushPeriod: options?.flushPeriod ?? 50,
-      includeClientMeta: options?.includeClientMeta ?? true,
-      maxRetries: options?.maxRetries ?? 3,
-      retryBackoff: options?.retryBackoff ?? 1000,
+      autoFlush: options?.autoFlush ?? DEFAULT_AUTO_FLUSH,
+      flushPeriodMs: options?.flushPeriodMs ?? DEFAULT_FLUSH_PERIOD_MS,
+      includeClientMeta: options?.includeClientMeta ?? DEFAULT_INCLUDE_CLIENT_META,
+      maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
+      retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
     });
   }
 }

@@ -149,7 +149,7 @@ describe('ParallaxClient', () => {
       const trace = client.trace({
         name: 'TestTrace',
         autoFlush: false,
-        flushPeriod: 100,
+        flushPeriodMs: 100,
         includeClientMeta: false,
       });
 
@@ -436,13 +436,13 @@ describe('ParallaxTrace', () => {
   });
 
   describe('auto-flush mode', () => {
-    it('should auto-flush after flushPeriod of inactivity', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriod: 50, includeClientMeta: false })
+    it('should auto-flush after flushPeriodMs of inactivity', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriodMs: 50, includeClientMeta: false })
         .addAttribute('key', 'value');
 
       expect(mockCreateTrace).not.toHaveBeenCalled();
 
-      // Advance time past flushPeriod
+      // Advance time past flushPeriodMs
       jest.advanceTimersByTime(50);
       await jest.runAllTimersAsync();
 
@@ -451,7 +451,7 @@ describe('ParallaxTrace', () => {
     });
 
     it('should reset timer on each SDK call', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriod: 50, includeClientMeta: false });
+      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriodMs: 50, includeClientMeta: false });
 
       trace.addAttribute('key1', 'value1');
       jest.advanceTimersByTime(30);
@@ -470,7 +470,7 @@ describe('ParallaxTrace', () => {
     });
 
     it('should allow explicit flush() even when autoFlush is true', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriod: 50, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriodMs: 50, includeClientMeta: false })
         .addAttribute('key', 'value');
 
       // Explicit flush before timer expires
@@ -487,7 +487,7 @@ describe('ParallaxTrace', () => {
     });
 
     it('should call UpdateTrace on subsequent auto-flushes', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriod: 50, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriodMs: 50, includeClientMeta: false })
         .addAttribute('key', 'value');
 
       jest.advanceTimersByTime(50);
@@ -503,9 +503,9 @@ describe('ParallaxTrace', () => {
     });
   });
 
-  describe('immediate flush mode (flushPeriod: 0)', () => {
+  describe('immediate flush mode (flushPeriodMs: 0)', () => {
     it('should flush immediately on every SDK call', async () => {
-      const trace = client.trace({ name: 'TestTrace', flushPeriod: 0, includeClientMeta: false });
+      const trace = client.trace({ name: 'TestTrace', flushPeriodMs: 0, includeClientMeta: false });
 
       trace.addAttribute('key1', 'value1');
       await jest.runAllTimersAsync();
@@ -521,7 +521,7 @@ describe('ParallaxTrace', () => {
     });
 
     it('should send each SDK call as a separate request', async () => {
-      const trace = client.trace({ name: 'TestTrace', flushPeriod: 0, includeClientMeta: false });
+      const trace = client.trace({ name: 'TestTrace', flushPeriodMs: 0, includeClientMeta: false });
 
       trace.addAttribute('first', 'value');
       await jest.runAllTimersAsync();
@@ -627,18 +627,28 @@ describe('ParallaxTrace', () => {
 
       trace.flush();
 
-      // First attempt fails immediately
+      // First attempt happens immediately
       await jest.advanceTimersByTimeAsync(0);
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
 
-      // Wait for first retry (100ms)
-      await jest.advanceTimersByTimeAsync(100);
+      // Before first retry delay (100ms * 2^0 = 100ms), no second call
+      await jest.advanceTimersByTimeAsync(99);
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
 
-      // Wait for second retry (200ms)
-      await jest.advanceTimersByTimeAsync(200);
+      // After first retry delay, second call happens
+      await jest.advanceTimersByTimeAsync(1);
+      expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+
+      // Before second retry delay (100ms * 2^1 = 200ms), no third call
+      await jest.advanceTimersByTimeAsync(199);
+      expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+
+      // After second retry delay, third call happens
+      await jest.advanceTimersByTimeAsync(1);
+      expect(mockCreateTrace).toHaveBeenCalledTimes(3);
 
       await jest.runAllTimersAsync();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(3);
       expect(trace.getTraceId()).toBe('trace-retry-success');
       expect(mockConsoleWarn).toHaveBeenCalledTimes(2);
     });
@@ -785,7 +795,7 @@ describe('ParallaxTrace', () => {
     });
 
     it('should work with real usage pattern - auto flush', async () => {
-      const trace = client.trace({ name: 'SendTransaction', flushPeriod: 50 })
+      const trace = client.trace({ name: 'SendTransaction', flushPeriodMs: 50 })
         .addAttribute('from', '0xabc123')
         .addAttribute('to', '0xdef456')
         .addTags(['transaction', 'ethereum'])

@@ -43,7 +43,7 @@ export interface TraceSubmitter {
 interface ResolvedTraceOptions {
   name?: string;
   autoFlush: boolean;
-  flushPeriod: number;
+  flushPeriodMs: number;
   includeClientMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
@@ -61,7 +61,7 @@ export class ParallaxTrace {
 
   // Flush configuration
   private autoFlush: boolean;
-  private flushPeriod: number;
+  private flushPeriodMs: number;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Retry configuration
@@ -82,7 +82,7 @@ export class ParallaxTrace {
     this.client = client;
     this.name = options.name;
     this.autoFlush = options.autoFlush;
-    this.flushPeriod = options.flushPeriod;
+    this.flushPeriodMs = options.flushPeriodMs;
     this.includeClientMeta = options.includeClientMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
@@ -91,13 +91,13 @@ export class ParallaxTrace {
   /**
    * Schedule an auto-flush after the configured period.
    * Resets the timer on each call.
-   * If flushPeriod is 0, flushes immediately on every call.
+   * If flushPeriodMs is 0, flushes immediately on every call.
    */
   private scheduleFlush(): void {
     if (!this.autoFlush) return;
 
-    // flushPeriod === 0 means flush immediately on every call
-    if (this.flushPeriod === 0) {
+    // flushPeriodMs === 0 means flush immediately on every call
+    if (this.flushPeriodMs === 0) {
       this.flush();
       return;
     }
@@ -107,7 +107,7 @@ export class ParallaxTrace {
     }
     this.flushTimer = setTimeout(() => {
       this.flush();
-    }, this.flushPeriod);
+    }, this.flushPeriodMs);
   }
 
   /**
@@ -229,6 +229,10 @@ export class ParallaxTrace {
     // Capture pending data NOW (before it changes)
     const traceData = this.buildTraceData();
 
+    // Capture context for error reporting
+    const isCreateOp = this.traceId === null;
+    const traceName = this.name;
+
     // Clear pending immediately so next flush doesn't re-send
     this.clearPending();
 
@@ -241,7 +245,9 @@ export class ParallaxTrace {
         await this.updateTrace(traceData);
       }
     }).catch(err => {
-      console.error('[ParallaxTrace] Flush error:', err);
+      const operation = isCreateOp ? 'CreateTrace' : 'UpdateTrace';
+      const context = traceName ? ` (trace: ${traceName})` : '';
+      console.error(`[ParallaxTrace] Flush error during ${operation}${context}:`, err);
     });
   }
 
