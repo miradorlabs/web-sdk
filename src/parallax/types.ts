@@ -4,10 +4,33 @@
 
 /**
  * Configuration options for ParallaxClient
+ * @deprecated Use ParallaxClientOptions instead
  */
 export interface ParallaxClientConfig {
   apiKey: string;
   apiUrl?: string;
+}
+
+/**
+ * Options for ParallaxClient constructor
+ */
+export interface ParallaxClientOptions {
+  /** Gateway URL (defaults to parallax-gateway-dev.mirador.org:443) */
+  apiUrl?: string;
+}
+
+/**
+ * Options for creating a trace
+ */
+export interface TraceOptions {
+  /** Trace name */
+  name?: string;
+  /** Enable auto-flush mode (default: true) */
+  autoFlush?: boolean;
+  /** Debounce period in ms before auto-flush triggers (default: 50) */
+  flushPeriod?: number;
+  /** Include browser/OS metadata in first flush (default: true) */
+  includeClientMeta?: boolean;
 }
 
 /**

@@ -4,6 +4,11 @@
 import {
   CreateTraceRequest,
   CreateTraceResponse,
+  UpdateTraceRequest,
+  UpdateTraceResponse,
+  TraceData,
+  Attributes,
+  Tags,
   Event,
   TxHashHint as TxHashHintProto,
   Chain,
@@ -31,25 +36,70 @@ const CHAIN_MAP: Record<ChainName, Chain> = {
  */
 export interface TraceSubmitter {
   _sendTrace(request: CreateTraceRequest): Promise<CreateTraceResponse>;
+  _updateTrace(request: UpdateTraceRequest): Promise<UpdateTraceResponse>;
+}
+
+/** Options passed to ParallaxTrace constructor (with defaults applied) */
+interface ResolvedTraceOptions {
+  name?: string;
+  autoFlush: boolean;
+  flushPeriod: number;
+  includeClientMeta: boolean;
 }
 
 /**
- * Builder class for constructing traces with method chaining
- * Automatically handles web-specific features like client metadata
+ * Builder class for constructing traces with method chaining.
+ * Supports auto-flush mode (default) where data is automatically sent after a period of inactivity,
+ * or manual flush mode where you explicitly call flush().
  */
 export class ParallaxTrace {
-  private name: string;
-  private attributes: { [key: string]: string } = {};
-  private tags: string[] = [];
-  private events: TraceEvent[] = [];
-  private txHashHint?: TxHashHint;
+  private name?: string;
   private client: TraceSubmitter;
   private includeClientMeta: boolean;
 
-  constructor(client: TraceSubmitter, name: string = '', includeClientMeta: boolean = true) {
+  // Flush configuration
+  private autoFlush: boolean;
+  private flushPeriod: number;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // State tracking
+  private traceId: string | null = null;
+  private pendingAttributes: { [key: string]: string } = {};
+  private pendingTags: string[] = [];
+  private pendingEvents: TraceEvent[] = [];
+  private pendingTxHashHints: TxHashHint[] = [];
+
+  // Queue for maintaining strict ordering of flushes
+  private flushQueue: Promise<void> = Promise.resolve();
+
+  constructor(client: TraceSubmitter, options: ResolvedTraceOptions) {
     this.client = client;
-    this.name = name;
-    this.includeClientMeta = includeClientMeta;
+    this.name = options.name;
+    this.autoFlush = options.autoFlush;
+    this.flushPeriod = options.flushPeriod;
+    this.includeClientMeta = options.includeClientMeta;
+  }
+
+  /**
+   * Schedule an auto-flush after the configured period.
+   * Resets the timer on each call.
+   * If flushPeriod is 0, flushes immediately on every call.
+   */
+  private scheduleFlush(): void {
+    if (!this.autoFlush) return;
+
+    // flushPeriod === 0 means flush immediately on every call
+    if (this.flushPeriod === 0) {
+      this.flush();
+      return;
+    }
+
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+    }
+    this.flushTimer = setTimeout(() => {
+      this.flush();
+    }, this.flushPeriod);
   }
 
   /**
@@ -59,10 +109,11 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addAttribute(key: string, value: string | number | boolean | object): this {
-    this.attributes[key] =
+    this.pendingAttributes[key] =
       typeof value === 'object' && value !== null
         ? JSON.stringify(value)
         : String(value);
+    this.scheduleFlush();
     return this;
   }
 
@@ -73,11 +124,12 @@ export class ParallaxTrace {
    */
   addAttributes(attributes: { [key: string]: string | number | boolean | object }): this {
     for (const [key, value] of Object.entries(attributes)) {
-      this.attributes[key] =
+      this.pendingAttributes[key] =
         typeof value === 'object' && value !== null
           ? JSON.stringify(value)
           : String(value);
     }
+    this.scheduleFlush();
     return this;
   }
 
@@ -87,7 +139,8 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addTag(tag: string): this {
-    this.tags.push(tag);
+    this.pendingTags.push(tag);
+    this.scheduleFlush();
     return this;
   }
 
@@ -97,7 +150,8 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addTags(tags: string[]): this {
-    this.tags.push(...tags);
+    this.pendingTags.push(...tags);
+    this.scheduleFlush();
     return this;
   }
 
@@ -113,97 +167,191 @@ export class ParallaxTrace {
       ? JSON.stringify(details)
       : details;
 
-    this.events.push({
+    this.pendingEvents.push({
       eventName,
       details: detailsString,
       timestamp: timestamp || new Date(),
     });
+    this.scheduleFlush();
     return this;
   }
 
   /**
-   * Set the transaction hash hint for blockchain correlation
+   * Add a transaction hash hint for blockchain correlation.
+   * Multiple hints can be added to the same trace.
    * @param txHash Transaction hash
    * @param chain Chain name (e.g., "ethereum", "polygon", "base")
    * @param details Optional details about the transaction
    * @returns This trace builder for chaining
    */
-  setTxHint(txHash: string, chain: ChainName, details?: string): this {
-    this.txHashHint = {
+  addTxHint(txHash: string, chain: ChainName, details?: string): this {
+    this.pendingTxHashHints.push({
       txHash,
       chain,
       details,
       timestamp: new Date(),
-    };
+    });
+    this.scheduleFlush();
     return this;
   }
 
   /**
-   * Create and submit the trace to the gateway
-   * @returns The trace ID if successful, undefined if failed
+   * Flush pending data to the gateway.
+   * Fire-and-forget - returns immediately but maintains strict ordering of requests.
+   * First flush calls CreateTrace, subsequent flushes call UpdateTrace.
    */
-  async create(): Promise<string | undefined> {
-    // Build the CreateTraceRequest
-    const request = new CreateTraceRequest();
-    request.setName(this.name);
-    request.setTagsList(this.tags);
-
-    // Add attributes
-    const attrsMap = request.getAttributesMap();
-    for (const [key, value] of Object.entries(this.attributes)) {
-      attrsMap.set(key, value);
+  flush(): void {
+    // Cancel any pending auto-flush timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
     }
 
-    // Add client metadata if requested
-    if (this.includeClientMeta) {
-      const clientMetadata = getClientMetadata();
-      for (const [key, value] of Object.entries(clientMetadata)) {
-        attrsMap.set(`client.${key}`, value);
+    // Check if there's anything to flush
+    const hasPendingData =
+      Object.keys(this.pendingAttributes).length > 0 ||
+      this.pendingTags.length > 0 ||
+      this.pendingEvents.length > 0 ||
+      this.pendingTxHashHints.length > 0;
+
+    if (!hasPendingData && this.traceId !== null) {
+      return; // Nothing to flush
+    }
+
+    // Capture pending data NOW (before it changes)
+    const traceData = this.buildTraceData();
+
+    // Clear pending immediately so next flush doesn't re-send
+    this.clearPending();
+
+    // Chain onto the queue for strict ordering
+    // Check traceId inside the queue to ensure proper ordering
+    this.flushQueue = this.flushQueue.then(async () => {
+      if (this.traceId === null) {
+        await this.createTrace(traceData);
+      } else {
+        await this.updateTrace(traceData);
+      }
+    }).catch(err => {
+      console.error('[ParallaxTrace] Flush error:', err);
+    });
+  }
+
+  /**
+   * Build TraceData from pending state
+   */
+  private buildTraceData(): TraceData {
+    const traceData = new TraceData();
+
+    // Add pending attributes (+ client metadata on first flush)
+    const allAttrs = { ...this.pendingAttributes };
+    if (this.traceId === null && this.includeClientMeta) {
+      const clientMeta = getClientMetadata();
+      for (const [key, value] of Object.entries(clientMeta)) {
+        allAttrs[`client.${key}`] = value;
       }
     }
+    if (Object.keys(allAttrs).length > 0) {
+      const attrsMsg = new Attributes();
+      const attrsMap = attrsMsg.getAttributesMap();
+      for (const [key, value] of Object.entries(allAttrs)) {
+        attrsMap.set(key, value);
+      }
+      traceData.addAttributes(attrsMsg);
+    }
 
-    // Add events
-    const eventsList: Event[] = [];
-    for (const event of this.events) {
+    // Add pending tags
+    if (this.pendingTags.length > 0) {
+      const tagsMsg = new Tags();
+      tagsMsg.setTagsList(this.pendingTags);
+      traceData.addTags(tagsMsg);
+    }
+
+    // Add pending events
+    for (const event of this.pendingEvents) {
       const eventMsg = new Event();
       eventMsg.setName(event.eventName);
       if (event.details) {
         eventMsg.setDetails(event.details);
       }
-      const timestamp = new Timestamp();
-      timestamp.fromDate(event.timestamp);
-      eventMsg.setTimestamp(timestamp);
-      eventsList.push(eventMsg);
+      const ts = new Timestamp();
+      ts.fromDate(event.timestamp);
+      eventMsg.setTimestamp(ts);
+      traceData.addEvents(eventMsg);
     }
-    request.setEventsList(eventsList);
 
-    // Add transaction hash hint if present
-    if (this.txHashHint) {
-      const txHint = new TxHashHintProto();
-      txHint.setTxHash(this.txHashHint.txHash);
-      txHint.setChain(CHAIN_MAP[this.txHashHint.chain]);
-      if (this.txHashHint.details) {
-        txHint.setDetails(this.txHashHint.details);
+    // Add pending tx hints
+    for (const hint of this.pendingTxHashHints) {
+      const hintMsg = new TxHashHintProto();
+      hintMsg.setTxHash(hint.txHash);
+      hintMsg.setChain(CHAIN_MAP[hint.chain]);
+      if (hint.details) {
+        hintMsg.setDetails(hint.details);
       }
-      const timestamp = new Timestamp();
-      timestamp.fromDate(this.txHashHint.timestamp);
-      txHint.setTimestamp(timestamp);
-      request.setTxHashHint(txHint);
+      const ts = new Timestamp();
+      ts.fromDate(hint.timestamp);
+      hintMsg.setTimestamp(ts);
+      traceData.addTxHashHints(hintMsg);
     }
+
+    return traceData;
+  }
+
+  /**
+   * Send CreateTrace request
+   */
+  private async createTrace(traceData: TraceData): Promise<void> {
+    const request = new CreateTraceRequest();
+    if (this.name) {
+      request.setName(this.name);
+    }
+    request.setData(traceData);
 
     try {
       const response = await this.client._sendTrace(request);
-      const responseStatus = response.getStatus();
-
-      if (responseStatus?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        console.log('[ParallaxTrace] Error:', responseStatus?.getErrorMessage() || 'Unknown error');
-        return undefined;
+      if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
+        this.traceId = response.getTraceId();
+      } else {
+        console.error('[ParallaxTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
       }
-
-      return response.getTraceId();
-    } catch (error) {
-      console.log('[ParallaxTrace] Error creating trace:', error);
-      return undefined;
+    } catch (err) {
+      console.error('[ParallaxTrace] CreateTrace error:', err);
     }
+  }
+
+  /**
+   * Send UpdateTrace request
+   */
+  private async updateTrace(traceData: TraceData): Promise<void> {
+    const request = new UpdateTraceRequest();
+    request.setTraceId(this.traceId!);
+    request.setData(traceData);
+
+    try {
+      const response = await this.client._updateTrace(request);
+      if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
+        console.error('[ParallaxTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
+      }
+    } catch (err) {
+      console.error('[ParallaxTrace] UpdateTrace error:', err);
+    }
+  }
+
+  /**
+   * Clear all pending data
+   */
+  private clearPending(): void {
+    this.pendingAttributes = {};
+    this.pendingTags = [];
+    this.pendingEvents = [];
+    this.pendingTxHashHints = [];
+  }
+
+  /**
+   * Get the trace ID (available after first flush completes)
+   * @returns The trace ID or null if not yet created
+   */
+  getTraceId(): string | null {
+    return this.traceId;
   }
 }

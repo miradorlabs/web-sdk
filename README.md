@@ -10,31 +10,69 @@ npm install @miradorlabs/parallax-web
 
 ## Features
 
-- **Fluent Builder Pattern** - Method chaining for creating traces
+- **Auto-Flush Mode** - Data automatically batches and sends after a configurable period of inactivity
+- **Fluent Builder Pattern** - Method chaining for building traces
 - **Browser-optimized** - Automatic client metadata collection (browser, OS, etc.)
 - **Blockchain Integration** - Built-in support for correlating traces with blockchain transactions
 - **TypeScript Support** - Full type definitions included
-- **Single Request** - All trace data submitted in one efficient gRPC call
+- **Strict Ordering** - Flush calls maintain strict ordering even when async
 
-## Quick Start
+## Quick Start (Auto-Flush - Default)
 
 ```typescript
 import { ParallaxClient } from '@miradorlabs/parallax-web';
 
-// API key is required, gateway URL is optional
 const client = new ParallaxClient('your-api-key');
 
-// Create and submit a trace
-const traceId = await client.trace('SwapExecution')
+const trace = client.trace({ name: 'SwapExecution' })
   .addAttribute('from', '0xabc...')
-  .addAttribute('slippage', { bps: 50, tolerance: 'auto' })  // objects are stringified
   .addTags(['dex', 'swap'])
-  .addEvent('quote_received', { provider: 'Uniswap' })
-  .addEvent('transaction_signed')
-  .setTxHint('0xtxhash...', 'ethereum')  // optional
-  .create();
+  .addEvent('quote_received');
+// → CreateTrace sent after 50ms of inactivity
 
-console.log('Trace ID:', traceId);
+trace.addEvent('transaction_signed')
+     .addTxHint('0xtxhash...', 'ethereum');
+// → UpdateTrace sent after 50ms of inactivity
+
+// You can still call flush() explicitly to send immediately
+trace.addEvent('confirmed');
+trace.flush();  // → UpdateTrace sent immediately
+```
+
+## Manual Flush Mode
+
+```typescript
+import { ParallaxClient } from '@miradorlabs/parallax-web';
+
+const client = new ParallaxClient('your-api-key');
+
+const trace = client.trace({ name: 'SwapExecution', autoFlush: false })
+  .addAttribute('from', '0xabc...')
+  .addTags(['dex', 'swap'])
+  .addEvent('quote_received');
+
+trace.flush();  // → CreateTrace
+
+trace.addEvent('transaction_signed')
+     .addTxHint('0xtxhash...', 'ethereum');
+
+trace.flush();  // → UpdateTrace
+```
+
+## Immediate Flush Mode
+
+Set `flushPeriod: 0` to flush immediately on every SDK call (no batching):
+
+```typescript
+import { ParallaxClient } from '@miradorlabs/parallax-web';
+
+const client = new ParallaxClient('your-api-key');
+
+const trace = client.trace({ name: 'SwapExecution', flushPeriod: 0 })
+  .addAttribute('from', '0xabc...');  // → CreateTrace sent immediately
+
+trace.addEvent('transaction_signed'); // → UpdateTrace sent immediately
+trace.addTxHint('0x...', 'ethereum'); // → UpdateTrace sent immediately
 ```
 
 ## API Reference
@@ -46,36 +84,46 @@ The main client for interacting with the Parallax Gateway.
 #### Constructor
 
 ```typescript
-new ParallaxClient(apiKey: string, apiUrl?: string)
+new ParallaxClient(apiKey: string, options?: ParallaxClientOptions)
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `apiKey` | `string` | Yes | API key for authentication (sent as `x-parallax-api-key` header) |
-| `apiUrl` | `string` | No | Gateway URL (defaults to `https://parallax-gateway-dev.mirador.org:443`) |
+| `options` | `ParallaxClientOptions` | No | Configuration options |
+
+#### Options
+
+```typescript
+interface ParallaxClientOptions {
+  apiUrl?: string;  // Gateway URL (defaults to parallax-gateway-dev.mirador.org:443)
+}
+```
 
 #### Methods
 
-##### `trace(name?, includeClientMeta?)`
+##### `trace(options?)`
 
 Creates a new trace builder.
 
 ```typescript
-const trace = client.trace('MyTrace');  // client metadata included by default
-const trace = client.trace();           // name is optional (defaults to empty string)
-// Or explicitly disable client metadata: client.trace('MyTrace', false)
+const trace = client.trace({ name: 'MyTrace' });
+const trace = client.trace({ name: 'MyTrace', autoFlush: false });
+const trace = client.trace({ autoFlush: false, flushPeriod: 100 });
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | `string` | `''` | Optional name of the trace |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | `undefined` | Optional name of the trace |
+| `autoFlush` | `boolean` | `true` | Auto-flush after period of inactivity |
+| `flushPeriod` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
 | `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
 
 Returns: `ParallaxTrace` builder instance
 
 ### ParallaxTrace (Builder)
 
-Fluent builder for constructing traces. All methods return `this` for chaining.
+Fluent builder for constructing traces. All builder methods return `this` for chaining.
 
 #### `addAttribute(key, value)`
 
@@ -109,7 +157,7 @@ trace.addTag('transaction')
      .addTags(['ethereum', 'send'])
 ```
 
-#### `addEvent(name, details?)`
+#### `addEvent(name, details?, timestamp?)`
 
 Add an event with optional details (string or object).
 
@@ -119,12 +167,13 @@ trace.addEvent('wallet_connected', { wallet: 'MetaMask' })
      .addEvent('transaction_confirmed', { blockNumber: 12345 })
 ```
 
-#### `setTxHint(txHash, chain, details?)`
+#### `addTxHint(txHash, chain, details?)`
 
-Set the transaction hash hint for blockchain correlation.
+Add a transaction hash hint for blockchain correlation. Multiple hints can be added.
 
 ```typescript
-trace.setTxHint('0x123...', 'ethereum', 'Main transaction')
+trace.addTxHint('0x123...', 'ethereum', 'Main transaction')
+     .addTxHint('0x456...', 'polygon', 'Bridge transaction')
 ```
 
 | Parameter | Type | Description |
@@ -133,15 +182,26 @@ trace.setTxHint('0x123...', 'ethereum', 'Main transaction')
 | `chain` | `ChainName` | Chain name: 'ethereum' \| 'polygon' \| 'arbitrum' \| 'base' \| 'optimism' \| 'bsc' |
 | `details` | `string` | Optional details about the transaction |
 
-#### `create()`
+#### `flush()`
 
-Submit the trace to the gateway.
+Flush pending data to the gateway. Fire-and-forget - returns immediately but maintains strict ordering.
+
+- First flush calls `CreateTrace`
+- Subsequent flushes call `UpdateTrace`
 
 ```typescript
-const traceId = await trace.create();
+trace.flush();
 ```
 
-Returns: `Promise<string | undefined>` - The trace ID if successful, undefined if failed
+Returns: `void`
+
+#### `getTraceId()`
+
+Get the trace ID (available after first flush completes).
+
+```typescript
+const traceId = trace.getTraceId();  // string | null
+```
 
 ## Complete Example: Transaction Tracking
 
@@ -151,34 +211,27 @@ import { ParallaxClient } from '@miradorlabs/parallax-web';
 const client = new ParallaxClient('your-api-key');
 
 async function handleWalletTransaction(userAddress: string, recipientAddress: string, amount: string) {
-  // Build trace with all transaction details (client metadata included by default)
-  const traceId = await client.trace('SendETH')
+  const trace = client.trace({ name: 'SendETH' })
     .addAttribute('from', userAddress)
     .addAttribute('to', recipientAddress)
     .addAttribute('value', amount)
-    .addAttribute('network', 'ethereum')
     .addTags(['transaction', 'send', 'ethereum'])
-    .addEvent('wallet_connected', { wallet: 'MetaMask' })
-    .addEvent('transaction_initiated')
-    .addEvent('user_signed')
-    .addEvent('transaction_sent', {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber,
-      gasUsed: receipt.gasUsed,
-      success: true
-    })
-    .setTxHint(receipt.hash, 'ethereum')
-    .create();
+    .addEvent('wallet_connected', { wallet: 'MetaMask' });
+  // → CreateTrace sent automatically
 
-  if (traceId) {
-    console.log('Trace ID:', traceId);
-  }
+  trace.addEvent('user_signed');
+
+  const receipt = await sendTransaction();
+
+  trace.addEvent('transaction_sent', { txHash: receipt.hash })
+       .addTxHint(receipt.hash, 'ethereum');
+  // → UpdateTrace sent automatically
 }
 ```
 
 ## Automatic Client Metadata Collection
 
-When `includeClientMeta: true` is set, the SDK automatically collects:
+When `includeClientMeta: true` is set (default), the SDK automatically collects:
 
 | Metadata | Description |
 |----------|-------------|
@@ -219,6 +272,8 @@ Full TypeScript support with exported types:
 import {
   ParallaxClient,
   ParallaxTrace,
+  ParallaxClientOptions,
+  TraceOptions,
   ChainName,  // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
 } from '@miradorlabs/parallax-web';
 ```
