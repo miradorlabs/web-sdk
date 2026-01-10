@@ -537,25 +537,27 @@ describe('ParallaxTrace', () => {
   });
 
   describe('error handling', () => {
-    it('should log error on CreateTrace failure', async () => {
+    it('should log error on CreateTrace failure after retries', async () => {
       mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
 
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+      // Disable retries for faster test
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, maxRetries: 0 })
         .addAttribute('key', 'value');
 
       trace.flush();
       await jest.runAllTimersAsync();
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        '[ParallaxTrace] CreateTrace error:',
+        '[ParallaxTrace] CreateTrace error after retries:',
         expect.any(Error)
       );
     });
 
-    it('should log error on UpdateTrace failure', async () => {
+    it('should log error on UpdateTrace failure after retries', async () => {
       mockUpdateTrace.mockRejectedValue(new Error('Connection failed'));
 
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+      // Disable retries for faster test
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, maxRetries: 0 })
         .addAttribute('key', 'value');
 
       trace.flush();
@@ -566,7 +568,7 @@ describe('ParallaxTrace', () => {
       await jest.runAllTimersAsync();
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        '[ParallaxTrace] UpdateTrace error:',
+        '[ParallaxTrace] UpdateTrace error after retries:',
         expect.any(Error)
       );
     });
@@ -590,6 +592,162 @@ describe('ParallaxTrace', () => {
         '[ParallaxTrace] CreateTrace failed:',
         'Validation error'
       );
+    });
+  });
+
+  describe('retry behavior', () => {
+    let mockConsoleWarn: jest.SpyInstance;
+
+    beforeEach(() => {
+      mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+    });
+
+    afterEach(() => {
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('should retry on CreateTrace failure with exponential backoff', async () => {
+      // Fail twice, then succeed
+      mockCreateTrace
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          getTraceId: () => 'trace-retry-success',
+          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+        });
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        maxRetries: 3,
+        retryBackoff: 100,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+
+      // First attempt fails immediately
+      await jest.advanceTimersByTimeAsync(0);
+
+      // Wait for first retry (100ms)
+      await jest.advanceTimersByTimeAsync(100);
+
+      // Wait for second retry (200ms)
+      await jest.advanceTimersByTimeAsync(200);
+
+      await jest.runAllTimersAsync();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(3);
+      expect(trace.getTraceId()).toBe('trace-retry-success');
+      expect(mockConsoleWarn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on UpdateTrace failure', async () => {
+      // First CreateTrace succeeds
+      mockCreateTrace.mockResolvedValue({
+        getTraceId: () => 'trace-456',
+        getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+      });
+
+      // UpdateTrace fails once, then succeeds
+      mockUpdateTrace
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+        });
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        maxRetries: 2,
+        retryBackoff: 50,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      trace.addEvent('event');
+      trace.flush();
+
+      // Wait for retry
+      await jest.advanceTimersByTimeAsync(50);
+      await jest.runAllTimersAsync();
+
+      expect(mockUpdateTrace).toHaveBeenCalledTimes(2);
+      expect(mockConsoleWarn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should respect maxRetries option', async () => {
+      mockCreateTrace.mockRejectedValue(new Error('Always fails'));
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        maxRetries: 2,
+        retryBackoff: 10,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+
+      // Allow all retries to complete
+      await jest.advanceTimersByTimeAsync(10);  // First retry
+      await jest.advanceTimersByTimeAsync(20);  // Second retry
+      await jest.runAllTimersAsync();
+
+      // Initial attempt + 2 retries = 3 total calls
+      expect(mockCreateTrace).toHaveBeenCalledTimes(3);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        '[ParallaxTrace] CreateTrace error after retries:',
+        expect.any(Error)
+      );
+    });
+
+    it('should use default retry options', async () => {
+      mockCreateTrace
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          getTraceId: () => 'trace-default',
+          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+        });
+
+      // Use default options (maxRetries: 3, retryBackoff: 1000)
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+
+      // First attempt fails
+      await jest.advanceTimersByTimeAsync(0);
+
+      // Wait for first retry (1000ms default backoff)
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.runAllTimersAsync();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+      expect(trace.getTraceId()).toBe('trace-default');
+    });
+
+    it('should disable retries when maxRetries is 0', async () => {
+      mockCreateTrace.mockRejectedValue(new Error('Network error'));
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        maxRetries: 0,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      // Only 1 attempt, no retries
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockConsoleWarn).not.toHaveBeenCalled();
     });
   });
 

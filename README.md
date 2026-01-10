@@ -118,6 +118,8 @@ const trace = client.trace({ autoFlush: false, flushPeriod: 100 });
 | `autoFlush` | `boolean` | `true` | Auto-flush after period of inactivity |
 | `flushPeriod` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
 | `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
+| `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
+| `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
 
 Returns: `ParallaxTrace` builder instance
 

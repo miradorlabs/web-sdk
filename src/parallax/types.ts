@@ -31,6 +31,10 @@ export interface TraceOptions {
   flushPeriod?: number;
   /** Include browser/OS metadata in first flush (default: true) */
   includeClientMeta?: boolean;
+  /** Maximum number of retry attempts on failure (default: 3) */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff between retries (default: 1000) */
+  retryBackoff?: number;
 }
 
 /**

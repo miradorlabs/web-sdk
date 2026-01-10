@@ -45,6 +45,8 @@ interface ResolvedTraceOptions {
   autoFlush: boolean;
   flushPeriod: number;
   includeClientMeta: boolean;
+  maxRetries: number;
+  retryBackoff: number;
 }
 
 /**
@@ -62,6 +64,10 @@ export class ParallaxTrace {
   private flushPeriod: number;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Retry configuration
+  private maxRetries: number;
+  private retryBackoff: number;
+
   // State tracking
   private traceId: string | null = null;
   private pendingAttributes: { [key: string]: string } = {};
@@ -78,6 +84,8 @@ export class ParallaxTrace {
     this.autoFlush = options.autoFlush;
     this.flushPeriod = options.flushPeriod;
     this.includeClientMeta = options.includeClientMeta;
+    this.maxRetries = options.maxRetries;
+    this.retryBackoff = options.retryBackoff;
   }
 
   /**
@@ -298,6 +306,41 @@ export class ParallaxTrace {
   }
 
   /**
+   * Sleep for the specified duration
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Execute an operation with exponential backoff retry
+   */
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    operationName: string
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (err) {
+        lastError = err as Error;
+
+        if (attempt < this.maxRetries) {
+          const delay = this.retryBackoff * Math.pow(2, attempt);
+          console.warn(
+            `[ParallaxTrace] ${operationName} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
+          );
+          await this.sleep(delay);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
    * Send CreateTrace request
    */
   private async createTrace(traceData: TraceData): Promise<void> {
@@ -308,14 +351,17 @@ export class ParallaxTrace {
     request.setData(traceData);
 
     try {
-      const response = await this.client._sendTrace(request);
+      const response = await this.retryWithBackoff(
+        () => this.client._sendTrace(request),
+        'CreateTrace'
+      );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         this.traceId = response.getTraceId();
       } else {
         console.error('[ParallaxTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
       }
     } catch (err) {
-      console.error('[ParallaxTrace] CreateTrace error:', err);
+      console.error('[ParallaxTrace] CreateTrace error after retries:', err);
     }
   }
 
@@ -328,12 +374,15 @@ export class ParallaxTrace {
     request.setData(traceData);
 
     try {
-      const response = await this.client._updateTrace(request);
+      const response = await this.retryWithBackoff(
+        () => this.client._updateTrace(request),
+        'UpdateTrace'
+      );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         console.error('[ParallaxTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
       }
     } catch (err) {
-      console.error('[ParallaxTrace] UpdateTrace error:', err);
+      console.error('[ParallaxTrace] UpdateTrace error after retries:', err);
     }
   }
 

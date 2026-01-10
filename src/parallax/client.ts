@@ -56,6 +56,8 @@ export class ParallaxClient {
       autoFlush: options?.autoFlush ?? true,
       flushPeriod: options?.flushPeriod ?? 50,
       includeClientMeta: options?.includeClientMeta ?? true,
+      maxRetries: options?.maxRetries ?? 3,
+      retryBackoff: options?.retryBackoff ?? 1000,
     });
   }
 }
