@@ -1,11 +1,21 @@
 /**
  * ParallaxClient - Main client for interacting with the Parallax Gateway
  */
-import { CreateTraceRequest } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+import {
+  CreateTraceRequest,
+  UpdateTraceRequest,
+} from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
 import { ParallaxTrace } from './trace';
+import type { ParallaxClientOptions, TraceOptions } from './types';
 
+// Default configuration values
 const DEFAULT_API_URL = 'https://parallax-gateway-dev.mirador.org:443';
+const DEFAULT_AUTO_FLUSH = true;
+const DEFAULT_FLUSH_PERIOD_MS = 50;
+const DEFAULT_INCLUDE_CLIENT_META = true;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_BACKOFF = 1000;
 
 /**
  * Main client for interacting with the Parallax Gateway API
@@ -18,49 +28,42 @@ export class ParallaxClient {
   /**
    * Create a new ParallaxClient instance
    * @param apiKey Required API key for authentication (sent as x-parallax-api-key header)
-   * @param apiUrl Optional gateway URL (defaults to parallax-gateway-dev.mirador.org:443)
+   * @param options Optional configuration options
    */
-  constructor(apiKey: string, apiUrl?: string) {
+  constructor(apiKey: string, options?: ParallaxClientOptions) {
     this.apiKey = apiKey;
-    this.apiUrl = apiUrl || DEFAULT_API_URL;
+    this.apiUrl = options?.apiUrl || DEFAULT_API_URL;
 
-    // API key is required - always include in credentials
     const credentials = { 'x-parallax-api-key': apiKey };
-
-    // Initialize the gRPC-Web client
     this.client = new ParallaxGatewayServiceClient(this.apiUrl, credentials);
   }
 
-  /**
-   * Internal method to send trace to gateway
-   * @internal
-   */
+  /** @internal */
   async _sendTrace(request: CreateTraceRequest) {
     const metadata = { 'x-parallax-api-key': this.apiKey };
     return await this.client.createTrace(request, metadata);
   }
 
+  /** @internal */
+  async _updateTrace(request: UpdateTraceRequest) {
+    const metadata = { 'x-parallax-api-key': this.apiKey };
+    return await this.client.updateTrace(request, metadata);
+  }
+
   /**
    * Create a new trace builder
    *
-   * Example usage:
-   * ```typescript
-   * const response = await client.trace("swap_execution")
-   *   .addAttribute("user", "0xabc...")
-   *   .addAttribute("slippage_bps", 25)
-   *   .addTag("dex")
-   *   .addTag("swap")
-   *   .addEvent("wallet_connected", { wallet: "MetaMask" })
-   *   .addEvent("quote_received")
-   *   .setTxHint("0x123...", "ethereum")
-   *   .create();
-   * ```
-   *
-   * @param name Optional name of the trace (defaults to empty string)
-   * @param includeClientMeta Optional flag to automatically include client metadata
+   * @param options Trace configuration options
    * @returns A ParallaxTrace builder instance
    */
-  trace(name: string = '', includeClientMeta: boolean = true): ParallaxTrace {
-    return new ParallaxTrace(this, name, includeClientMeta);
+  trace(options?: TraceOptions): ParallaxTrace {
+    return new ParallaxTrace(this, {
+      name: options?.name,
+      autoFlush: options?.autoFlush ?? DEFAULT_AUTO_FLUSH,
+      flushPeriodMs: options?.flushPeriodMs ?? DEFAULT_FLUSH_PERIOD_MS,
+      includeClientMeta: options?.includeClientMeta ?? DEFAULT_INCLUDE_CLIENT_META,
+      maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
+      retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
+    });
   }
 }

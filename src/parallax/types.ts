@@ -3,11 +3,29 @@
  */
 
 /**
- * Configuration options for ParallaxClient
+ * Options for ParallaxClient constructor
  */
-export interface ParallaxClientConfig {
-  apiKey: string;
+export interface ParallaxClientOptions {
+  /** Gateway URL (defaults to parallax-gateway-dev.mirador.org:443) */
   apiUrl?: string;
+}
+
+/**
+ * Options for creating a trace
+ */
+export interface TraceOptions {
+  /** Trace name */
+  name?: string;
+  /** Enable auto-flush mode (default: true) */
+  autoFlush?: boolean;
+  /** Debounce period in ms before auto-flush triggers (default: 50) */
+  flushPeriodMs?: number;
+  /** Include browser/OS metadata in first flush (default: true) */
+  includeClientMeta?: boolean;
+  /** Maximum number of retry attempts on failure (default: 3) */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff between retries (default: 1000) */
+  retryBackoff?: number;
 }
 
 /**

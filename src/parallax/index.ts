@@ -9,7 +9,8 @@ export { ParallaxTrace } from './trace';
 
 // Types
 export type {
-  ParallaxClientConfig,
+  ParallaxClientOptions,
+  TraceOptions,
   ClientMetadata,
   TraceEvent,
   TxHashHint,
