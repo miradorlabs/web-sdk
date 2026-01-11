@@ -435,6 +435,72 @@ describe('ParallaxTrace', () => {
     });
   });
 
+  describe('send_client_timestamp', () => {
+    it('should set send_client_timestamp on CreateTrace request', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+        .addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const timestamp = request.getSendClientTimestamp();
+      expect(timestamp).toBeDefined();
+    });
+
+    it('should set send_client_timestamp on UpdateTrace request', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+        .addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      trace.addEvent('new_event');
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockUpdateTrace.mock.calls[0][0] as UpdateTraceRequest;
+      const timestamp = request.getSendClientTimestamp();
+      expect(timestamp).toBeDefined();
+    });
+
+    it('should set fresh timestamp on each retry attempt', async () => {
+      // Fail once, then succeed
+      mockCreateTrace
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          getTraceId: () => 'trace-retry',
+          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+        });
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        maxRetries: 1,
+        retryBackoff: 100,
+      }).addAttribute('key', 'value');
+
+      trace.flush();
+
+      // First attempt
+      await jest.advanceTimersByTimeAsync(0);
+
+      // Wait for retry
+      await jest.advanceTimersByTimeAsync(100);
+      await jest.runAllTimersAsync();
+
+      // Both calls should have timestamps set
+      expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+
+      const firstRequest = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const secondRequest = mockCreateTrace.mock.calls[1][0] as CreateTraceRequest;
+
+      expect(firstRequest.getSendClientTimestamp()).toBeDefined();
+      expect(secondRequest.getSendClientTimestamp()).toBeDefined();
+    });
+  });
+
   describe('auto-flush mode', () => {
     it('should auto-flush after flushPeriodMs of inactivity', async () => {
       const trace = client.trace({ name: 'TestTrace', autoFlush: true, flushPeriodMs: 50, includeClientMeta: false })
