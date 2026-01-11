@@ -1,6 +1,6 @@
 {
   "name": "@miradorlabs/parallax-web",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "description": "Parallax Web Client Side SDK ",
   "main": "dist/index.umd.js",
