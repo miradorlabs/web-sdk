@@ -12,6 +12,10 @@ import {
   Event,
   TxHashHint as TxHashHintProto,
   Chain,
+  KeepAliveRequest,
+  KeepAliveResponse,
+  CloseTraceRequest,
+  CloseTraceResponse,
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-parallax-web/proto/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
@@ -37,6 +41,8 @@ const CHAIN_MAP: Record<ChainName, Chain> = {
 export interface TraceSubmitter {
   _sendTrace(request: CreateTraceRequest): Promise<CreateTraceResponse>;
   _updateTrace(request: UpdateTraceRequest): Promise<UpdateTraceResponse>;
+  _keepAlive(request: KeepAliveRequest): Promise<KeepAliveResponse>;
+  _closeTrace(request: CloseTraceRequest): Promise<CloseTraceResponse>;
 }
 
 /** Options passed to ParallaxTrace constructor (with defaults applied) */
@@ -47,6 +53,7 @@ interface ResolvedTraceOptions {
   includeClientMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
+  keepAliveIntervalMs: number;
 }
 
 /**
@@ -64,12 +71,17 @@ export class ParallaxTrace {
   private flushPeriodMs: number;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Keep-alive configuration
+  private keepAliveIntervalMs: number;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
   // Retry configuration
   private maxRetries: number;
   private retryBackoff: number;
 
   // State tracking
   private traceId: string | null = null;
+  private closed: boolean = false;
   private pendingAttributes: { [key: string]: string } = {};
   private pendingTags: string[] = [];
   private pendingEvents: TraceEvent[] = [];
@@ -86,6 +98,7 @@ export class ParallaxTrace {
     this.includeClientMeta = options.includeClientMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
+    this.keepAliveIntervalMs = options.keepAliveIntervalMs;
   }
 
   /**
@@ -117,6 +130,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addAttribute(key: string, value: string | number | boolean | object): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addAttribute call.');
+      return this;
+    }
     this.pendingAttributes[key] =
       typeof value === 'object' && value !== null
         ? JSON.stringify(value)
@@ -131,6 +148,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addAttributes(attributes: { [key: string]: string | number | boolean | object }): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addAttributes call.');
+      return this;
+    }
     for (const [key, value] of Object.entries(attributes)) {
       this.pendingAttributes[key] =
         typeof value === 'object' && value !== null
@@ -147,6 +168,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addTag(tag: string): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTag call.');
+      return this;
+    }
     this.pendingTags.push(tag);
     this.scheduleFlush();
     return this;
@@ -158,6 +183,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addTags(tags: string[]): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTags call.');
+      return this;
+    }
     this.pendingTags.push(...tags);
     this.scheduleFlush();
     return this;
@@ -171,6 +200,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addEvent(eventName: string, details?: string | object, timestamp?: Date): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addEvent call.');
+      return this;
+    }
     const detailsString = typeof details === 'object' && details !== null
       ? JSON.stringify(details)
       : details;
@@ -193,6 +226,10 @@ export class ParallaxTrace {
    * @returns This trace builder for chaining
    */
   addTxHint(txHash: string, chain: ChainName, details?: string): this {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTxHint call.');
+      return this;
+    }
     this.pendingTxHashHints.push({
       txHash,
       chain,
@@ -209,6 +246,11 @@ export class ParallaxTrace {
    * First flush calls CreateTrace, subsequent flushes call UpdateTrace.
    */
   flush(): void {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is closed. Ignoring flush call.');
+      return;
+    }
+
     // Cancel any pending auto-flush timer
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -363,6 +405,7 @@ export class ParallaxTrace {
       );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         this.traceId = response.getTraceId();
+        this.startKeepAlive();
       } else {
         console.error('[ParallaxTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
       }
@@ -403,10 +446,101 @@ export class ParallaxTrace {
   }
 
   /**
+   * Start the keep-alive timer to ping the server periodically
+   */
+  private startKeepAlive(): void {
+    if (this.keepAliveTimer !== null) {
+      return; // Already started
+    }
+
+    this.keepAliveTimer = setInterval(() => {
+      this.sendKeepAlive();
+    }, this.keepAliveIntervalMs);
+  }
+
+  /**
+   * Send a keep-alive ping to the server
+   */
+  private async sendKeepAlive(): Promise<void> {
+    if (!this.traceId || this.closed) {
+      return;
+    }
+
+    const request = new KeepAliveRequest();
+    request.setTraceId(this.traceId);
+
+    try {
+      const response = await this.client._keepAlive(request);
+      if (!response.getAccepted()) {
+        console.warn('[ParallaxTrace] KeepAlive was not accepted by server');
+      }
+    } catch (err) {
+      console.error('[ParallaxTrace] KeepAlive error:', err);
+    }
+  }
+
+  /**
+   * Stop the keep-alive timer
+   */
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer !== null) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+  }
+
+  /**
+   * Close the trace and stop all timers.
+   * After calling this method, all subsequent operations (addAttribute, addEvent, etc.) will be ignored.
+   * @param reason Optional reason for closing the trace
+   */
+  async close(reason?: string): Promise<void> {
+    if (this.closed) {
+      console.warn('[ParallaxTrace] Trace is already closed.');
+      return;
+    }
+
+    this.closed = true;
+
+    // Stop all timers
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.stopKeepAlive();
+
+    // Send close request if we have a trace ID
+    if (this.traceId) {
+      const request = new CloseTraceRequest();
+      request.setTraceId(this.traceId);
+      if (reason) {
+        request.setText(reason);
+      }
+
+      try {
+        const response = await this.client._closeTrace(request);
+        if (!response.getAccepted()) {
+          console.warn('[ParallaxTrace] CloseTrace was not accepted by server');
+        }
+      } catch (err) {
+        console.error('[ParallaxTrace] CloseTrace error:', err);
+      }
+    }
+  }
+
+  /**
    * Get the trace ID (available after first flush completes)
    * @returns The trace ID or null if not yet created
    */
   getTraceId(): string | null {
     return this.traceId;
+  }
+
+  /**
+   * Check if the trace is closed
+   * @returns True if the trace is closed
+   */
+  isClosed(): boolean {
+    return this.closed;
   }
 }

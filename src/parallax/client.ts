@@ -4,6 +4,8 @@
 import {
   CreateTraceRequest,
   UpdateTraceRequest,
+  KeepAliveRequest,
+  CloseTraceRequest,
 } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
@@ -17,6 +19,7 @@ const DEFAULT_FLUSH_PERIOD_MS = 10;
 const DEFAULT_INCLUDE_CLIENT_META = true;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BACKOFF = 1000;
+const DEFAULT_KEEP_ALIVE_INTERVAL_MS = 10000;
 
 /**
  * Main client for interacting with the Parallax Gateway API
@@ -24,6 +27,7 @@ const DEFAULT_RETRY_BACKOFF = 1000;
 export class ParallaxClient {
   public apiUrl: string;
   public apiKey: string;
+  public keepAliveIntervalMs: number;
   private client: ParallaxGatewayServiceClient;
 
   /**
@@ -34,6 +38,7 @@ export class ParallaxClient {
   constructor(apiKey: string, options?: ParallaxClientOptions) {
     this.apiKey = apiKey;
     this.apiUrl = options?.apiUrl || DEFAULT_API_URL;
+    this.keepAliveIntervalMs = options?.keepAliveIntervalMs || DEFAULT_KEEP_ALIVE_INTERVAL_MS;
 
     const credentials = { 'x-parallax-api-key': apiKey };
     this.client = new ParallaxGatewayServiceClient(this.apiUrl, credentials);
@@ -57,6 +62,18 @@ export class ParallaxClient {
     return await this.client.updateTrace(request, metadata);
   }
 
+  /** @internal */
+  async _keepAlive(request: KeepAliveRequest) {
+    const metadata = { 'x-parallax-api-key': this.apiKey };
+    return await this.client.keepAlive(request, metadata);
+  }
+
+  /** @internal */
+  async _closeTrace(request: CloseTraceRequest) {
+    const metadata = { 'x-parallax-api-key': this.apiKey };
+    return await this.client.closeTrace(request, metadata);
+  }
+
   /**
    * Create a new trace builder
    *
@@ -71,6 +88,7 @@ export class ParallaxClient {
       includeClientMeta: options?.includeClientMeta ?? DEFAULT_INCLUDE_CLIENT_META,
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
+      keepAliveIntervalMs: this.keepAliveIntervalMs,
     });
   }
 }
