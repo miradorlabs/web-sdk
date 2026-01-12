@@ -28,6 +28,8 @@ export interface TraceOptions {
   maxRetries?: number;
   /** Base delay in ms for exponential backoff between retries (default: 1000) */
   retryBackoff?: number;
+  /** Automatically close trace on page unload (default: false) */
+  autoClose?: boolean;
 }
 
 /**

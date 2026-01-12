@@ -129,6 +129,28 @@ try {
 }
 ```
 
+### Auto-Close on Page Unload
+
+For browser-based applications, you can enable automatic trace closing when the user navigates away or closes the tab:
+
+```typescript
+const trace = client.trace({
+  name: 'UserSession',
+  autoClose: true  // Automatically close on page unload
+});
+
+// Trace will automatically close with reason "Page unload" when:
+// - User closes the tab/window
+// - User navigates to a different page
+// - Page is refreshed
+```
+
+**Important Notes:**
+- Auto-close uses the `beforeunload` event
+- The trace will be closed with the reason "Page unload"
+- You can still manually call `close()` before page unload
+- The event listener is automatically cleaned up when you manually close the trace
+
 ## API Reference
 
 ### ParallaxClient
@@ -175,6 +197,7 @@ const trace = client.trace({ autoFlush: false, flushPeriodMs: 100 });
 | `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
+| `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
 
 Returns: `ParallaxTrace` builder instance
 

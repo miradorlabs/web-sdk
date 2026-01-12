@@ -54,6 +54,7 @@ interface ResolvedTraceOptions {
   maxRetries: number;
   retryBackoff: number;
   keepAliveIntervalMs: number;
+  autoClose: boolean;
 }
 
 /**
@@ -74,6 +75,10 @@ export class ParallaxTrace {
   // Keep-alive configuration
   private keepAliveIntervalMs: number;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Auto-close configuration
+  private autoClose: boolean;
+  private unloadHandler: (() => void) | null = null;
 
   // Retry configuration
   private maxRetries: number;
@@ -99,6 +104,16 @@ export class ParallaxTrace {
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
+    this.autoClose = options.autoClose;
+
+    // Set up auto-close on page unload if enabled
+    if (this.autoClose && typeof window !== 'undefined') {
+      this.unloadHandler = () => {
+        // Use sendBeacon for reliable delivery during page unload
+        this.close('Page unload');
+      };
+      window.addEventListener('beforeunload', this.unloadHandler);
+    }
   }
 
   /**
@@ -508,6 +523,12 @@ export class ParallaxTrace {
       this.flushTimer = null;
     }
     this.stopKeepAlive();
+
+    // Remove unload handler if it was registered
+    if (this.unloadHandler && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.unloadHandler);
+      this.unloadHandler = null;
+    }
 
     // Send close request if we have a trace ID
     if (this.traceId) {

@@ -20,6 +20,7 @@ const DEFAULT_INCLUDE_CLIENT_META = true;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BACKOFF = 1000;
 const DEFAULT_KEEP_ALIVE_INTERVAL_MS = 10000;
+const DEFAULT_AUTO_CLOSE = false;
 
 /**
  * Main client for interacting with the Parallax Gateway API
@@ -89,6 +90,7 @@ export class ParallaxClient {
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,
+      autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
     });
   }
 }
