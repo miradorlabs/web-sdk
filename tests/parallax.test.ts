@@ -1,5 +1,6 @@
 // ParallaxClient and ParallaxTrace Unit Tests
-import { ParallaxClient, ParallaxTrace } from '../src/parallax';
+import { ParallaxClient, ParallaxTrace, captureStackTrace } from '../src/parallax';
+import type { StackTrace } from '../src/parallax';
 import { ParallaxGatewayServiceClient } from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatewayServiceClientPb';
 import {
   CreateTraceRequest,
@@ -13,6 +14,7 @@ jest.mock('mirador-gateway-parallax-web/proto/gateway/parallax/v1/Parallax_gatew
 
 // Mock console to avoid cluttering test output
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
+const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 
 // Mock fetch for IP lookup
 global.fetch = jest.fn();
@@ -61,6 +63,7 @@ function mockIntlDateTimeFormat() {
 
 afterAll(() => {
   mockConsoleError.mockRestore();
+  mockConsoleWarn.mockRestore();
 });
 
 describe('ParallaxClient', () => {
@@ -98,6 +101,7 @@ describe('ParallaxClient', () => {
   afterEach(() => {
     jest.useRealTimers();
     mockConsoleError.mockClear();
+    mockConsoleWarn.mockClear();
   });
 
   describe('constructor', () => {
@@ -192,6 +196,7 @@ describe('ParallaxTrace', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    mockConsoleWarn.mockClear();
   });
 
   describe('builder methods', () => {
@@ -883,6 +888,261 @@ describe('ParallaxTrace', () => {
       await jest.runAllTimersAsync();
 
       expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('stack trace features', () => {
+    it('should create trace with captureStackTrace option', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false, captureStackTrace: true })
+        .addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const attrsList = data!.getAttributesList();
+      expect(attrsList.length).toBe(1);
+
+      const attrsMap = attrsList[0].getAttributesMap();
+      expect(attrsMap.get('source.stack_trace')).toBeDefined();
+      expect(attrsMap.get('source.file')).toBeDefined();
+      expect(attrsMap.get('source.line')).toBeDefined();
+      expect(attrsMap.get('source.function')).toBeDefined();
+
+      // Verify stack trace is valid JSON
+      const stackTraceJson = attrsMap.get('source.stack_trace');
+      const stackTrace = JSON.parse(stackTraceJson!);
+      expect(stackTrace.frames).toBeInstanceOf(Array);
+      expect(stackTrace.raw).toBeDefined();
+    });
+
+    it('should create trace without stack trace when option is false', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false, captureStackTrace: false })
+        .addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const attrsList = data!.getAttributesList();
+      const attrsMap = attrsList[0].getAttributesMap();
+
+      // Should not have stack trace attributes
+      expect(attrsMap.get('source.stack_trace')).toBeUndefined();
+    });
+
+    it('should add event with captureStackTrace option', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addEvent('error_occurred', { code: 500 }, { captureStackTrace: true });
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      expect(events.length).toBe(1);
+
+      const eventDetails = JSON.parse(events[0].getDetails());
+      expect(eventDetails.code).toBe(500);
+      expect(eventDetails.stackTrace).toBeDefined();
+      expect(eventDetails.stackTrace.frames).toBeInstanceOf(Array);
+    });
+
+    it('should add event with string details and captureStackTrace', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addEvent('message', 'Something happened', { captureStackTrace: true });
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      const eventDetails = JSON.parse(events[0].getDetails());
+
+      expect(eventDetails.message).toBe('Something happened');
+      expect(eventDetails.stackTrace).toBeDefined();
+    });
+
+    it('should support legacy timestamp parameter for addEvent', async () => {
+      const customTimestamp = new Date('2024-01-15T10:00:00Z');
+
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addEvent('legacy_event', 'details', customTimestamp);
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      expect(events[0].getDetails()).toBe('details');
+      // Verify timestamp was set (we can't easily compare the protobuf timestamp)
+      expect(events[0].getTimestamp()).toBeDefined();
+    });
+
+    it('addStackTrace() should return this for chaining', () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const result = trace.addStackTrace('checkpoint');
+
+      expect(result).toBe(trace);
+    });
+
+    it('should add stack trace via addStackTrace method', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addStackTrace('checkpoint', { stage: 'validation' });
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      expect(events.length).toBe(1);
+      expect(events[0].getName()).toBe('checkpoint');
+
+      const details = JSON.parse(events[0].getDetails());
+      expect(details.stage).toBe('validation');
+      expect(details.stackTrace).toBeDefined();
+      expect(details.stackTrace.frames).toBeInstanceOf(Array);
+    });
+
+    it('should use default event name for addStackTrace', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addStackTrace();
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      expect(events[0].getName()).toBe('stack_trace');
+    });
+
+    it('addExistingStackTrace() should return this for chaining', () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const mockStack: StackTrace = {
+        frames: [{ functionName: 'test', fileName: 'test.ts', lineNumber: 1, columnNumber: 1 }],
+        raw: 'test stack',
+      };
+      const result = trace.addExistingStackTrace(mockStack);
+
+      expect(result).toBe(trace);
+    });
+
+    it('should add existing stack trace via addExistingStackTrace', async () => {
+      // Capture a stack trace
+      const capturedStack = captureStackTrace();
+
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addExistingStackTrace(capturedStack, 'deferred_trace', { reason: 'async' });
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const events = data!.getEventsList();
+      expect(events.length).toBe(1);
+      expect(events[0].getName()).toBe('deferred_trace');
+
+      const details = JSON.parse(events[0].getDetails());
+      expect(details.reason).toBe('async');
+      expect(details.stackTrace.frames).toEqual(capturedStack.frames);
+      expect(details.stackTrace.raw).toBe(capturedStack.raw);
+    });
+
+    it('should ignore stack trace methods on closed trace', async () => {
+      // Mock closeTrace
+      const mockCloseTrace = jest.fn().mockResolvedValue({
+        getAccepted: () => true,
+      });
+      (ParallaxGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+        createTrace: mockCreateTrace,
+        updateTrace: mockUpdateTrace,
+        closeTrace: mockCloseTrace,
+        keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      }));
+
+      const localClient = new ParallaxClient('test-api-key');
+      const trace = localClient.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+        .addAttribute('key', 'value');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      await trace.close();
+
+      // These should be ignored (trace is closed)
+      const mockStack: StackTrace = {
+        frames: [{ functionName: 'test', fileName: 'test.ts', lineNumber: 1, columnNumber: 1 }],
+        raw: 'test stack',
+      };
+
+      trace.addStackTrace('should_be_ignored');
+      trace.addExistingStackTrace(mockStack, 'also_ignored');
+
+      // Verify warnings were logged (uses console.warn)
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        '[ParallaxTrace] Trace is closed. Ignoring addStackTrace call.'
+      );
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        '[ParallaxTrace] Trace is closed. Ignoring addExistingStackTrace call.'
+      );
+    });
+
+    it('should work with fluent API including stack traces', async () => {
+      const preTraceStack = captureStackTrace();
+
+      const trace = client.trace({ name: 'ComplexTrace', autoFlush: false, includeClientMeta: false, captureStackTrace: true })
+        .addAttribute('user', '0xabc')
+        .addTag('swap')
+        .addEvent('started')
+        .addEvent('validation_complete', { valid: true }, { captureStackTrace: true })
+        .addStackTrace('checkpoint', { stage: 'pre_transaction' })
+        .addExistingStackTrace(preTraceStack, 'trace_origin', { note: 'captured before trace' })
+        .addEvent('completed');
+
+      trace.flush();
+      await jest.runAllTimersAsync();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+
+      // Verify attributes include source.* from captureStackTrace option
+      const attrsList = data!.getAttributesList();
+      const attrsMap = attrsList[0].getAttributesMap();
+      expect(attrsMap.get('source.stack_trace')).toBeDefined();
+
+      // Verify events
+      const events = data!.getEventsList();
+      expect(events.length).toBe(5);
+      expect(events[0].getName()).toBe('started');
+      expect(events[1].getName()).toBe('validation_complete');
+      expect(events[2].getName()).toBe('checkpoint');
+      expect(events[3].getName()).toBe('trace_origin');
+      expect(events[4].getName()).toBe('completed');
+
+      // Verify validation_complete has stack trace
+      const validationDetails = JSON.parse(events[1].getDetails());
+      expect(validationDetails.valid).toBe(true);
+      expect(validationDetails.stackTrace).toBeDefined();
+
+      // Verify checkpoint has stack trace
+      const checkpointDetails = JSON.parse(events[2].getDetails());
+      expect(checkpointDetails.stage).toBe('pre_transaction');
+      expect(checkpointDetails.stackTrace).toBeDefined();
+
+      // Verify trace_origin has the pre-captured stack trace
+      const originDetails = JSON.parse(events[3].getDetails());
+      expect(originDetails.note).toBe('captured before trace');
+      expect(originDetails.stackTrace.frames).toEqual(preTraceStack.frames);
     });
   });
 });

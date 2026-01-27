@@ -91,6 +91,7 @@ export class ParallaxClient {
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
+      captureStackTrace: options?.captureStackTrace ?? false,
     });
   }
 }

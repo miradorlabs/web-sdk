@@ -7,6 +7,9 @@
 export { ParallaxClient } from './client';
 export { ParallaxTrace } from './trace';
 
+// Stack trace utilities
+export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './stacktrace';
+
 // Types
 export type {
   ParallaxClientOptions,
@@ -15,6 +18,9 @@ export type {
   TraceEvent,
   TxHashHint,
   ChainName,
+  AddEventOptions,
+  StackFrame,
+  StackTrace,
 } from './types';
 
 // Metadata utilities (for advanced usage)

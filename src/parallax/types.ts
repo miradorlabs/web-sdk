@@ -30,6 +30,8 @@ export interface TraceOptions {
   retryBackoff?: number;
   /** Automatically close trace on page unload (default: false) */
   autoClose?: boolean;
+  /** Capture stack trace at trace creation point */
+  captureStackTrace?: boolean;
 }
 
 /**
@@ -91,5 +93,37 @@ export interface TxHashHint {
   chain: ChainName;
   details?: string;
   timestamp: Date;
+}
+
+/**
+ * A single frame in a stack trace
+ */
+export interface StackFrame {
+  /** Function or method name */
+  functionName: string;
+  /** File path */
+  fileName: string;
+  /** Line number */
+  lineNumber: number;
+  /** Column number */
+  columnNumber: number;
+}
+
+/**
+ * A captured stack trace
+ */
+export interface StackTrace {
+  /** Array of stack frames (top of stack first) */
+  frames: StackFrame[];
+  /** Raw stack string from Error.stack */
+  raw: string;
+}
+
+/**
+ * Options for adding an event
+ */
+export interface AddEventOptions {
+  /** Capture stack trace at the point where addEvent is called */
+  captureStackTrace?: boolean;
 }
 
