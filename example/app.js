@@ -1,15 +1,15 @@
-// Import the Parallax SDK
-import { ParallaxClient } from '../dist/index.esm.js';
+// Import the Mirador SDK
+import { Client } from '../dist/index.esm.js';
 
 // Initialize the client
 // Use proxy to avoid CORS issues (default)
-// To use direct connection, change to: 'https://parallax-gateway-dev.mirador.org:443'
+// To use direct connection, change to: 'https://ingest-gateway-dev.mirador.org:443'
 const USE_PROXY = true;
 const GATEWAY_URL = USE_PROXY
   ? 'http://localhost:3001'  // Proxy server (no CORS issues)
-  : 'https://parallax-gateway-dev.mirador.org:443';  // Direct (may have CORS issues)
+  : 'https://ingest-gateway-dev.mirador.org:443';  // Direct (may have CORS issues)
 
-const client = new ParallaxClient('demo-api-key', GATEWAY_URL);
+const client = new Client('demo-api-key', GATEWAY_URL);
 
 // State management
 let currentTrace = null;
@@ -284,7 +284,7 @@ elements.submitBtn.addEventListener('click', async () => {
     elements.submitBtn.disabled = true;
     elements.submitBtn.textContent = 'Submitting...';
 
-    log('🚀 Submitting trace to Parallax Gateway...', 'info');
+    log('🚀 Submitting trace to Mirador Gateway...', 'info');
 
     let response;
     if (txHash && chainId) {

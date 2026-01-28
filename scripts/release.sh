@@ -10,7 +10,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Parallax Web Client Release Script${NC}"
+echo -e "${BLUE}  Mirador Web Client Release Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 

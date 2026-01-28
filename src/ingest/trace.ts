@@ -1,5 +1,5 @@
 /**
- * ParallaxTrace builder class for constructing traces with method chaining
+ * Mirador Trace builder class for constructing traces with method chaining
  */
 import {
   CreateTraceRequest,
@@ -16,8 +16,8 @@ import {
   KeepAliveResponse,
   CloseTraceRequest,
   CloseTraceResponse,
-} from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
-import { ResponseStatus } from 'mirador-gateway-parallax-web/proto/common/v1/status_pb';
+} from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import type { TraceEvent, TxHashHint, ChainName, AddEventOptions, StackTrace } from './types';
 import { getClientMetadata } from './metadata';
@@ -36,7 +36,7 @@ const CHAIN_MAP: Record<ChainName, Chain> = {
 };
 
 /**
- * Interface for the client that ParallaxTrace uses to submit traces
+ * Interface for the client that MiradorTrace uses to submit traces
  * @internal
  */
 export interface TraceSubmitter {
@@ -46,7 +46,7 @@ export interface TraceSubmitter {
   _closeTrace(request: CloseTraceRequest): Promise<CloseTraceResponse>;
 }
 
-/** Options passed to ParallaxTrace constructor (with defaults applied) */
+/** Options passed to MiradorTrace constructor (with defaults applied) */
 interface ResolvedTraceOptions {
   name?: string;
   autoFlush: boolean;
@@ -64,7 +64,7 @@ interface ResolvedTraceOptions {
  * Supports auto-flush mode (default) where data is automatically sent after a period of inactivity,
  * or manual flush mode where you explicitly call flush().
  */
-export class ParallaxTrace {
+export class Trace {
   private name?: string;
   private client: TraceSubmitter;
   private includeClientMeta: boolean;
@@ -154,7 +154,7 @@ export class ParallaxTrace {
    */
   addAttribute(key: string, value: string | number | boolean | object): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addAttribute call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addAttribute call.');
       return this;
     }
     this.pendingAttributes[key] =
@@ -172,7 +172,7 @@ export class ParallaxTrace {
    */
   addAttributes(attributes: { [key: string]: string | number | boolean | object }): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addAttributes call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addAttributes call.');
       return this;
     }
     for (const [key, value] of Object.entries(attributes)) {
@@ -192,7 +192,7 @@ export class ParallaxTrace {
    */
   addTag(tag: string): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTag call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addTag call.');
       return this;
     }
     this.pendingTags.push(tag);
@@ -207,7 +207,7 @@ export class ParallaxTrace {
    */
   addTags(tags: string[]): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTags call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addTags call.');
       return this;
     }
     this.pendingTags.push(...tags);
@@ -224,7 +224,7 @@ export class ParallaxTrace {
    */
   addEvent(eventName: string, details?: string | object, options?: AddEventOptions | Date): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addEvent call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addEvent call.');
       return this;
     }
 
@@ -278,7 +278,7 @@ export class ParallaxTrace {
    */
   addStackTrace(eventName: string = 'stack_trace', additionalDetails?: object): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addStackTrace call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addStackTrace call.');
       return this;
     }
 
@@ -309,7 +309,7 @@ export class ParallaxTrace {
    */
   addExistingStackTrace(stackTrace: StackTrace, eventName: string = 'stack_trace', additionalDetails?: object): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addExistingStackTrace call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addExistingStackTrace call.');
       return this;
     }
 
@@ -340,7 +340,7 @@ export class ParallaxTrace {
    */
   addTxHint(txHash: string, chain: ChainName, details?: string): this {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring addTxHint call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addTxHint call.');
       return this;
     }
     this.pendingTxHashHints.push({
@@ -360,7 +360,7 @@ export class ParallaxTrace {
    */
   flush(): void {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is closed. Ignoring flush call.');
+      console.warn('[MiradorTrace] Trace is closed. Ignoring flush call.');
       return;
     }
 
@@ -402,7 +402,7 @@ export class ParallaxTrace {
     }).catch(err => {
       const operation = isCreateOp ? 'CreateTrace' : 'UpdateTrace';
       const context = traceName ? ` (trace: ${traceName})` : '';
-      console.error(`[ParallaxTrace] Flush error during ${operation}${context}:`, err);
+      console.error(`[MiradorTrace] Flush error during ${operation}${context}:`, err);
     });
   }
 
@@ -412,12 +412,12 @@ export class ParallaxTrace {
   private buildTraceData(): TraceData {
     const traceData = new TraceData();
 
-    // Add pending attributes (+ client metadata on first flush + stack trace if captured)
+    // Add pending attributes (+ user metadata on first flush + stack trace if captured)
     const allAttrs = { ...this.pendingAttributes };
     if (this.traceId === null && this.includeClientMeta) {
       const clientMeta = getClientMetadata();
       for (const [key, value] of Object.entries(clientMeta)) {
-        allAttrs[`client.${key}`] = value;
+        allAttrs[`user.${key}`] = value;
       }
     }
     // Add creation stack trace attributes on first flush
@@ -501,7 +501,7 @@ export class ParallaxTrace {
         if (attempt < this.maxRetries) {
           const delay = this.retryBackoff * Math.pow(2, attempt);
           console.warn(
-            `[ParallaxTrace] ${operationName} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
+            `[MiradorTrace] ${operationName} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
           );
           await this.sleep(delay);
         }
@@ -530,10 +530,10 @@ export class ParallaxTrace {
         this.traceId = response.getTraceId();
         this.startKeepAlive();
       } else {
-        console.error('[ParallaxTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
+        console.error('[MiradorTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
       }
     } catch (err) {
-      console.error('[ParallaxTrace] CreateTrace error after retries:', err);
+      console.error('[MiradorTrace] CreateTrace error after retries:', err);
     }
   }
 
@@ -551,10 +551,10 @@ export class ParallaxTrace {
         'UpdateTrace'
       );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        console.error('[ParallaxTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
+        console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
       }
     } catch (err) {
-      console.error('[ParallaxTrace] UpdateTrace error after retries:', err);
+      console.error('[MiradorTrace] UpdateTrace error after retries:', err);
     }
   }
 
@@ -595,10 +595,10 @@ export class ParallaxTrace {
     try {
       const response = await this.client._keepAlive(request);
       if (!response.getAccepted()) {
-        console.warn('[ParallaxTrace] KeepAlive was not accepted by server');
+        console.warn('[MiradorTrace] KeepAlive was not accepted by server');
       }
     } catch (err) {
-      console.error('[ParallaxTrace] KeepAlive error:', err);
+      console.error('[MiradorTrace] KeepAlive error:', err);
     }
   }
 
@@ -619,7 +619,7 @@ export class ParallaxTrace {
    */
   async close(reason?: string): Promise<void> {
     if (this.closed) {
-      console.warn('[ParallaxTrace] Trace is already closed.');
+      console.warn('[MiradorTrace] Trace is already closed.');
       return;
     }
 
@@ -649,10 +649,10 @@ export class ParallaxTrace {
       try {
         const response = await this.client._closeTrace(request);
         if (!response.getAccepted()) {
-          console.warn('[ParallaxTrace] CloseTrace was not accepted by server');
+          console.warn('[MiradorTrace] CloseTrace was not accepted by server');
         }
       } catch (err) {
-        console.error('[ParallaxTrace] CloseTrace error:', err);
+        console.error('[MiradorTrace] CloseTrace error:', err);
       }
     }
   }

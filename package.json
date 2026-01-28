@@ -1,8 +1,8 @@
 {
-  "name": "@miradorlabs/parallax-web",
+  "name": "@miradorlabs/web",
   "version": "2.4.0",
   "type": "module",
-  "description": "Parallax Web Client Side SDK ",
+  "description": "Mirador Client Side Web SDK ",
   "main": "dist/index.umd.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
@@ -50,7 +50,7 @@
   "dependencies": {
     "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
-    "mirador-gateway-parallax-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/parallax/grpc-web/mirador-gateway-parallax-grpc-web-1.0.17.tgz",
+    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.1.tgz",
     "rxjs": "^7.8.2"
   },
   "author": "@mirador",

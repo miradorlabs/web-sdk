@@ -1,2 +1,2 @@
-// Parallax Web Client SDK - Public API
-export * from './parallax';
+// Mirador Web Client SDK - Public API
+export * from './ingest';

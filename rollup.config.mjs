@@ -36,7 +36,7 @@ export default [
     output: {
       file: 'dist/index.umd.js',
       format: 'umd',
-      name: 'ParallaxWeb',
+      name: 'MiradorWeb',
       sourcemap: true,
       globals: {
         'rxjs': 'rxjs',

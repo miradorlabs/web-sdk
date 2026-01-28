@@ -1,6 +1,6 @@
 /**
  * Simple Express proxy server to handle CORS issues
- * Proxies gRPC-Web requests to the Parallax Gateway
+ * Proxies gRPC-Web requests to the Mirador Gateway
  */
 
 import express from 'express';
@@ -10,14 +10,14 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 const app = express();
 const PORT = 3001;
 
-// Target Parallax Gateway
-const GATEWAY_URL = 'https://parallax-gateway-dev.mirador.org:443';
+// Target Mirador Gateway
+const GATEWAY_URL = 'https://ingest-gateway-dev.mirador.org:443';
 
 // Enable CORS for all origins (development only)
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-grpc-web', 'x-user-agent', 'x-parallax-api-key'],
+  allowedHeaders: ['Content-Type', 'x-grpc-web', 'x-user-agent', 'x-ingest-api-key'],
   exposedHeaders: ['grpc-status', 'grpc-message'],
   credentials: true
 }));
@@ -72,7 +72,7 @@ app.use('/', createProxyMiddleware({
 app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
-║  Parallax gRPC-Web Proxy Server                            ║
+║  Mirador gRPC-Web Proxy Server                            ║
 ╟────────────────────────────────────────────────────────────╢
 ║  Proxy running at: http://localhost:${PORT}                    ║
 ║  Gateway target:   ${GATEWAY_URL}  ║
