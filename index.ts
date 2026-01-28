@@ -1,15 +1,15 @@
 // Core SDK exports
-export { ParallaxClient, ParallaxTrace } from './src/parallax';
+export { Client, Trace } from './src/ingest';
 
 // Stack trace utilities
-export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/parallax';
+export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
 
 // Metadata utilities
-export { getClientMetadata, detectBrowser, detectOS, detectDeviceType } from './src/parallax';
+export { getClientMetadata, detectBrowser, detectOS, detectDeviceType } from './src/ingest';
 
 // Types
 export type {
-  ParallaxClientOptions,
+  ClientOptions,
   TraceOptions,
   ClientMetadata,
   TraceEvent,
@@ -18,10 +18,10 @@ export type {
   AddEventOptions,
   StackFrame,
   StackTrace,
-} from './src/parallax';
+} from './src/ingest';
 
 // Re-export proto types for convenience
 export {
   CreateTraceRequest,
   CreateTraceResponse,
-} from 'mirador-gateway-parallax-web/proto/gateway/parallax/v1/parallax_gateway_pb';
+} from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';

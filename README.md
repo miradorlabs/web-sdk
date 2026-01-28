@@ -1,11 +1,11 @@
-# Parallax Web Client SDK
+# Mirador Web Client SDK
 
-Web browser SDK for the Parallax tracing platform. This package provides a browser-compatible client using gRPC-Web to interact with the Parallax Gateway API.
+Web browser SDK for the Mirador tracing platform. This package provides a browser-compatible client using gRPC-Web to interact with the Mirador Ingest Gateway API.
 
 ## Installation
 
 ```bash
-npm install @miradorlabs/parallax-web
+npm install @miradorlabs/web
 ```
 
 ## Features
@@ -23,9 +23,9 @@ npm install @miradorlabs/parallax-web
 ## Quick Start (Auto-Flush - Default)
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import { Client } from '@miradorlabs/web';
 
-const client = new ParallaxClient('your-api-key');
+const client = new Client('your-api-key');
 
 const trace = client.trace({ name: 'SwapExecution' })
   .addAttribute('from', '0xabc...')
@@ -45,9 +45,9 @@ trace.flush();  // → UpdateTrace sent immediately
 ## Manual Flush Mode
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import { Client } from '@miradorlabs/web';
 
-const client = new ParallaxClient('your-api-key');
+const client = new Client('your-api-key');
 
 const trace = client.trace({ name: 'SwapExecution', autoFlush: false })
   .addAttribute('from', '0xabc...')
@@ -67,9 +67,9 @@ trace.flush();  // → UpdateTrace
 Set `flushPeriodMs: 0` to flush immediately on every SDK call (no batching):
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import { Client } from '@miradorlabs/web';
 
-const client = new ParallaxClient('your-api-key');
+const client = new Client('your-api-key');
 
 const trace = client.trace({ name: 'SwapExecution', flushPeriodMs: 0 })
   .addAttribute('from', '0xabc...');  // → CreateTrace sent immediately
@@ -86,10 +86,10 @@ The SDK automatically sends keep-alive pings to the server every 10 seconds (con
 
 ```typescript
 // Use default 10-second interval
-const client = new ParallaxClient('your-api-key');
+const client = new Client('your-api-key');
 
 // Or customize the interval
-const client = new ParallaxClient('your-api-key', {
+const client = new Client('your-api-key', {
   keepAliveIntervalMs: 15000  // Ping every 15 seconds
 });
 
@@ -154,26 +154,26 @@ const trace = client.trace({
 
 ## API Reference
 
-### ParallaxClient
+### Client
 
-The main client for interacting with the Parallax Gateway.
+The main client for interacting with the Mirador Ingest Gateway.
 
 #### Constructor
 
 ```typescript
-new ParallaxClient(apiKey: string, options?: ParallaxClientOptions)
+new Client(apiKey: string, options?: ClientOptions)
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `apiKey` | `string` | Yes | API key for authentication (sent as `x-parallax-api-key` header) |
-| `options` | `ParallaxClientOptions` | No | Configuration options |
+| `apiKey` | `string` | Yes | API key for authentication (sent as `x-ingest-api-key` header) |
+| `options` | `ClientOptions` | No | Configuration options |
 
 #### Options
 
 ```typescript
-interface ParallaxClientOptions {
-  apiUrl?: string;              // Gateway URL (defaults to parallax-gateway-dev.mirador.org:443)
+interface ClientOptions {
+  apiUrl?: string;              // Gateway URL (defaults to ingest-gateway-dev.mirador.org:443)
   keepAliveIntervalMs?: number; // Keep-alive ping interval in milliseconds (default: 10000)
 }
 ```
@@ -189,8 +189,8 @@ const trace = client.trace({ name: 'MyTrace' });
 const trace = client.trace({ name: 'MyTrace', autoFlush: false });
 const trace = client.trace({ autoFlush: false, flushPeriodMs: 100 });
 
-// With stack trace capture - records where in your code the trace was created
-const trace = client.trace({ name: 'MyTrace', captureStackTrace: true });
+// Stack trace capture is enabled by default - to disable:
+const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 ```
 
 | Option | Type | Default | Description |
@@ -202,11 +202,11 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: true });
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
 | `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
-| `captureStackTrace` | `boolean` | `false` | Capture stack trace at trace creation point |
+| `captureStackTrace` | `boolean` | `true` | Capture stack trace at trace creation point |
 
-Returns: `ParallaxTrace` builder instance
+Returns: `Trace` builder instance
 
-### ParallaxTrace (Builder)
+### Trace (Builder)
 
 Fluent builder for constructing traces. All builder methods return `this` for chaining.
 
@@ -283,7 +283,7 @@ trace.addStackTrace('checkpoint', { stage: 'validation' })
 Add a previously captured stack trace as an event. Useful when you need to capture a stack trace at one point but record it later.
 
 ```typescript
-import { captureStackTrace } from '@miradorlabs/parallax-web';
+import { captureStackTrace } from '@miradorlabs/web';
 
 // Capture stack trace now
 const stack = captureStackTrace();
@@ -365,10 +365,10 @@ const closed = trace.isClosed();  // boolean
 ## Complete Example: Transaction Tracking
 
 ```typescript
-import { ParallaxClient } from '@miradorlabs/parallax-web';
+import { Client } from '@miradorlabs/web';
 
 // Create client with custom keep-alive interval (optional)
-const client = new ParallaxClient('your-api-key', {
+const client = new Client('your-api-key', {
   keepAliveIntervalMs: 15000  // Override default 10s interval
 });
 
@@ -444,7 +444,7 @@ import {
   captureStackTrace,
   formatStackTrace,
   formatStackTraceReadable
-} from '@miradorlabs/parallax-web';
+} from '@miradorlabs/web';
 
 // Capture current stack trace
 const stack = captureStackTrace();
@@ -467,15 +467,15 @@ Full TypeScript support with exported types:
 
 ```typescript
 import {
-  ParallaxClient,
-  ParallaxTrace,
-  ParallaxClientOptions,
+  Client,
+  Trace,
+  ClientOptions,
   TraceOptions,      // { captureStackTrace?: boolean, ... }
   AddEventOptions,   // { captureStackTrace?: boolean }
   StackFrame,        // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,        // { frames: StackFrame[], raw: string }
   ChainName,         // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
-} from '@miradorlabs/parallax-web';
+} from '@miradorlabs/web';
 ```
 
 ## Browser Compatibility

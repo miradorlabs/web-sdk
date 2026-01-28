@@ -1,18 +1,18 @@
 /**
- * Parallax Web Client SDK
- * Browser SDK for the Parallax tracing platform
+ * Mirador Ingest Web Client SDK
+ * Browser SDK for the Mirador tracing platform
  */
 
 // Classes
-export { ParallaxClient } from './client';
-export { ParallaxTrace } from './trace';
+export { Client } from './client';
+export { Trace } from './trace';
 
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './stacktrace';
 
 // Types
 export type {
-  ParallaxClientOptions,
+  ClientOptions,
   TraceOptions,
   ClientMetadata,
   TraceEvent,

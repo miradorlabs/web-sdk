@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Browser SDK for the Parallax tracing platform using gRPC-Web to communicate with the Parallax Gateway API. Published as `@miradorlabs/parallax-web`.
+Browser SDK for the Mirador tracing platform using gRPC-Web to communicate with the Mirador Ingest Gateway API. Published as `@miradorlabs/web`.
 
 ## Commands
 
@@ -20,23 +20,23 @@ npm run lint:fix       # Lint and auto-fix
 
 ```
 src/
-├── index.ts              # Re-exports from parallax/
-└── parallax/
+├── index.ts              # Re-exports from ingest/
+└── ingest/
     ├── index.ts          # Public exports
-    ├── client.ts         # ParallaxClient - main entry point, holds gRPC client
-    ├── trace.ts          # ParallaxTrace - fluent builder with flush logic
+    ├── client.ts         # Client - main entry point, holds gRPC client
+    ├── trace.ts          # Trace - fluent builder with flush logic
     ├── types.ts          # TypeScript interfaces (TraceOptions, ChainName, etc.)
     └── metadata.ts       # Browser metadata detection utilities
 ```
 
 ### Key Classes
 
-**ParallaxClient** (`client.ts`)
-- Creates gRPC-Web client for Parallax Gateway
-- `trace(options?)` returns a `ParallaxTrace` builder
+**Client** (`client.ts`)
+- Creates gRPC-Web client for Mirador Gateway
+- `trace(options?)` returns a `Trace` builder
 - `_sendTrace()` / `_updateTrace()` are internal methods called by trace
 
-**ParallaxTrace** (`trace.ts`)
+**Trace** (`trace.ts`)
 - Fluent builder: `addAttribute()`, `addEvent()`, `addTags()`, `addTxHint()`
 - Manages pending state and flush queue for strict ordering
 - `flush()` sends `CreateTrace` (first call) or `UpdateTrace` (subsequent)
@@ -45,7 +45,7 @@ src/
 
 ### Proto Dependency
 
-The gRPC types come from `mirador-gateway-parallax-web` (private package). Key imports:
+The gRPC types come from `mirador-gateway-ingest-web` (private package). Key imports:
 - `CreateTraceRequest`, `UpdateTraceRequest`, `TraceData`
 - `Attributes`, `Tags`, `Event`, `TxHashHint`, `Chain`
 

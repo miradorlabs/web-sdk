@@ -1,6 +1,6 @@
-# Parallax Web Client Demo
+# Mirador Web Client Demo
 
-An interactive web application demonstrating how to use the Parallax SDK to create and manage transaction traces.
+An interactive web application demonstrating how to use the Mirador SDK to create and manage transaction traces.
 
 ## Features
 
@@ -96,7 +96,7 @@ Or:
 **JSON Support**: If your details start with `{` or `[`, they'll be parsed as JSON automatically.
 
 ### Step 5: Submit the Trace
-Submit your trace to the Parallax Gateway:
+Submit your trace to the Mirador Gateway:
 
 **Without Transaction Hash:**
 - Just click "Submit Trace"
@@ -147,7 +147,7 @@ console.log("Trace ID:", response.getTraceId());
 
 ## Understanding the Builder Pattern
 
-The Parallax SDK uses a **builder pattern** for creating traces:
+The Mirador SDK uses a **builder pattern** for creating traces:
 
 ```javascript
 client.trace(name, includeClientMeta)
@@ -182,15 +182,15 @@ All SDK operations are logged with timestamps for debugging.
 
 By default, the demo connects to:
 ```javascript
-const client = new ParallaxClient(
+const client = new Client(
   'demo-api-key',
-  'https://parallax-gateway-dev.mirador.org:443'
+  'https://ingest-gateway-dev.mirador.org:443'
 );
 ```
 
 To use a different endpoint, modify `app.js`:
 ```javascript
-const client = new ParallaxClient(
+const client = new MiradorClient(
   'your-api-key',
   'https://your-gateway-url:port'
 );
@@ -216,7 +216,7 @@ All metadata is prefixed with `client.*` (e.g., `client.browser`, `client.os`)
 ### CORS Errors
 If you see CORS errors in the console:
 - Make sure you're serving the files via HTTP (not opening `file://` directly)
-- Check that the Parallax Gateway allows requests from your origin
+- Check that the Mirador Gateway allows requests from your origin
 
 ### Import Errors
 If you see module import errors:
@@ -236,7 +236,7 @@ If trace submission fails:
 ```
 example/
 ├── index.html          # Main HTML page with styles
-├── app.js              # Application logic using Parallax SDK
+├── app.js              # Application logic using Mirador SDK
 └── README.md           # This file
 ```
 
@@ -252,6 +252,5 @@ After exploring the demo:
 
 ## Learn More
 
-- [Parallax SDK Documentation](../README.md)
-- [API Reference](../src/parallax/index.ts)
-- [ParallaxService](../src/parallax/ParallaxService.ts) - Higher-level service wrapper
+- [Mirador SDK Documentation](../README.md)
+- [API Reference](../src/ingest/index.ts)

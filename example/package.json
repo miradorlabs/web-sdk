@@ -1,7 +1,7 @@
 {
-  "name": "parallax-web-demo",
+  "name": "mirador-web-demo",
   "version": "1.0.0",
-  "description": "Interactive demo for Parallax Web SDK",
+  "description": "Interactive demo for Mirador Web SDK",
   "type": "module",
   "scripts": {
     "build-sdk": "cd .. && npm run build",
@@ -13,12 +13,12 @@
     "dev:no-proxy": "npm run build && npx http-server -p 8000 -o"
   },
   "keywords": [
-    "parallax",
+    "mirador",
     "demo",
     "web",
     "tracing"
   ],
-  "author": "@mirador",
+  "author": "@miradorlabs",
   "license": "ISC",
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.3",
