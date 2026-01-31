@@ -1,6 +1,6 @@
 {
   "name": "@miradorlabs/web",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "description": "Mirador Client Side Web SDK ",
   "main": "dist/index.umd.js",
