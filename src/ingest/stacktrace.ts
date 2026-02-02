@@ -73,9 +73,14 @@ export function captureStackTrace(skipFrames: number = 1): StackTrace {
   // Add 1 to account for this function itself
   const frames = allFrames.slice(skipFrames + 1);
 
+  // Strip "Error" or "Error: ..." line from the beginning of raw stack
+  const lines = rawStack.split('\n');
+  const stackLines = lines.filter(line => line.trim().startsWith('at '));
+  const cleanRaw = stackLines.join('\n');
+
   return {
     frames,
-    raw: rawStack,
+    raw: cleanRaw,
   };
 }
 
