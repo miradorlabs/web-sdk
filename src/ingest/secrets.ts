@@ -88,14 +88,14 @@ export function obfuscateSecrets(obj: unknown, depth: number = 0): unknown {
   if (typeof obj === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      if (isSensitiveKey(key) && typeof value === 'string') {
-        // Redact string values with sensitive keys
+      if (typeof value === 'object' && value !== null) {
+        // Always recurse into nested objects to find secrets within
+        result[key] = obfuscateSecrets(value, depth + 1);
+      } else if (isSensitiveKey(key)) {
+        // Redact any primitive value with a sensitive key
         result[key] = REDACTED;
       } else if (typeof value === 'string') {
         result[key] = isSensitiveValue(value) ? REDACTED : value;
-      } else if (typeof value === 'object' && value !== null) {
-        // Always recurse into nested objects to find secrets within
-        result[key] = obfuscateSecrets(value, depth + 1);
       } else {
         result[key] = value;
       }

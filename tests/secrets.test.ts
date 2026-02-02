@@ -56,6 +56,22 @@ describe('Secret Obfuscation', () => {
       expect(result.Token).toBe('[REDACTED]');
       expect(result.SECRET).toBe('[REDACTED]');
     });
+
+    it('should redact non-string values with sensitive keys', () => {
+      const obj = {
+        password: 123456,
+        apiKey: true,
+        token: null,
+        username: 'john',
+        count: 42,
+      };
+      const result = obfuscateSecrets(obj) as Record<string, unknown>;
+      expect(result.password).toBe('[REDACTED]');
+      expect(result.apiKey).toBe('[REDACTED]');
+      expect(result.token).toBe('[REDACTED]');
+      expect(result.username).toBe('john');
+      expect(result.count).toBe(42);
+    });
   });
 
   describe('sensitive value detection', () => {
