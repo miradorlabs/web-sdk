@@ -91,8 +91,6 @@ export class Client {
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
-      captureStackTrace: options?.captureStackTrace ?? true,
-      locals: options?.locals,
     });
   }
 }

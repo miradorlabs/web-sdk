@@ -332,63 +332,6 @@ describe('Trace', () => {
     });
   });
 
-  describe('locals capture', () => {
-    it('should include locals in trace init event', async () => {
-      const userId = 'user-123';
-      const config = { debug: true, timeout: 5000 };
-
-      const trace = client.trace({
-        name: 'TestTrace',
-        autoFlush: false,
-        includeUserMeta: false,
-        locals: { userId, config },
-      });
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const events = request.getData()!.getEventsList();
-      expect(events[0].getName()).toBe('trace init');
-
-      const details = JSON.parse(events[0].getDetails());
-      expect(details.locals).toBeDefined();
-      expect(details.locals.userId).toBe('user-123');
-      expect(details.locals.config.debug).toBe(true);
-      expect(details.locals.config.timeout).toBe(5000);
-    });
-
-    it('should obfuscate secrets in locals', async () => {
-      const trace = client.trace({
-        name: 'TestTrace',
-        autoFlush: false,
-        includeUserMeta: false,
-        locals: {
-          userId: 'user-123',
-          password: 'secret123',
-          apiKey: 'my-api-key',
-          config: {
-            token: 'bearer-token',
-            publicId: 'pub-123',
-          },
-        },
-      });
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const events = request.getData()!.getEventsList();
-      const details = JSON.parse(events[0].getDetails());
-
-      expect(details.locals.userId).toBe('user-123');
-      expect(details.locals.password).toBe('[REDACTED]');
-      expect(details.locals.apiKey).toBe('[REDACTED]');
-      expect(details.locals.config.token).toBe('[REDACTED]');
-      expect(details.locals.config.publicId).toBe('pub-123');
-    });
-  });
-
   describe('error handling', () => {
     it('should handle CreateTrace failure gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();

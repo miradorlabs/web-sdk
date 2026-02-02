@@ -22,7 +22,6 @@ import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import type { TraceEvent, TxHashHint, ChainName, AddEventOptions, StackTrace } from './types';
 import { getClientMetadata } from './metadata';
 import { captureStackTrace } from './stacktrace';
-import { obfuscateSecrets } from './secrets';
 
 /**
  * Maps chain names to proto Chain enum values
@@ -57,8 +56,6 @@ interface ResolvedTraceOptions {
   retryBackoff: number;
   keepAliveIntervalMs: number;
   autoClose: boolean;
-  captureStackTrace: boolean;
-  locals?: Record<string, unknown>;
 }
 
 /**
@@ -96,7 +93,7 @@ export class Trace {
   private pendingEvents: TraceEvent[] = [];
   private pendingTxHashHints: TxHashHint[] = [];
   private creationStackTrace: StackTrace | null = null;
-  private creationLocals: Record<string, unknown> | null = null;
+  private initEventAdded: boolean = false;
 
   // Queue for maintaining strict ordering of flushes
   private flushQueue: Promise<void> = Promise.resolve();
@@ -112,15 +109,8 @@ export class Trace {
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
     this.autoClose = options.autoClose;
 
-    if (options.captureStackTrace) {
-      // Skip 2 frames: this constructor and the trace() method that called it
-      this.creationStackTrace = captureStackTrace(2);
-    }
-
-    if (options.locals) {
-      // Obfuscate secrets immediately at capture time
-      this.creationLocals = obfuscateSecrets(options.locals) as Record<string, unknown>;
-    }
+    // Skip 2 frames: this constructor and the trace() method that called it
+    this.creationStackTrace = captureStackTrace(2);
 
     // Set up auto-close on page unload if enabled
     if (this.autoClose && typeof window !== 'undefined') {
@@ -420,30 +410,24 @@ export class Trace {
   private buildTraceData(): TraceData {
     const traceData = new TraceData();
 
-    // Add "trace init" event on first flush with stack trace and locals
-    if (this.traceId === null && (this.creationStackTrace || this.creationLocals)) {
+    // Add "trace init" event on first flush with stack trace
+    if (!this.initEventAdded) {
       const initEventMsg = new Event();
       initEventMsg.setName('trace init');
 
       const initDetails: Record<string, unknown> = {};
 
       if (this.creationStackTrace) {
-        initDetails.stackTrace = {
-          frames: this.creationStackTrace.frames,
-          raw: this.creationStackTrace.raw,
-        };
-
+        // Put file/line/function at top for quick reference
         if (this.creationStackTrace.frames.length > 0) {
           const topFrame = this.creationStackTrace.frames[0];
           initDetails.file = topFrame.fileName;
           initDetails.line = topFrame.lineNumber;
           initDetails.function = topFrame.functionName;
         }
-      }
 
-      if (this.creationLocals) {
-        // Locals are already obfuscated at capture time
-        initDetails.locals = this.creationLocals;
+        // Put raw stack trace at bottom (expandable in UI)
+        initDetails.stackTrace = this.creationStackTrace.raw;
       }
 
       initEventMsg.setDetails(JSON.stringify(initDetails));
@@ -451,6 +435,8 @@ export class Trace {
       initTs.fromDate(new Date());
       initEventMsg.setTimestamp(initTs);
       traceData.addEvents(initEventMsg);
+
+      this.initEventAdded = true;
     }
 
     // Add pending attributes (+ user metadata on first flush)
