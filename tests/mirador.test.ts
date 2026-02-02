@@ -62,7 +62,7 @@ describe('Client', () => {
 
     it('should use default gateway URL when not provided', () => {
       const client = new Client('my-api-key');
-      expect(client.apiUrl).toBe('https://ingest-gateway-dev.mirador.org:443');
+      expect(client.apiUrl).toBe('https://ingest.mirador.org:443');
     });
 
     it('should use custom gateway URL when provided', () => {
@@ -76,7 +76,7 @@ describe('Client', () => {
       new Client(apiKey);
 
       expect(IngestGatewayServiceClient).toHaveBeenCalledWith(
-        'https://ingest-gateway-dev.mirador.org:443',
+        'https://ingest.mirador.org:443',
         { 'x-ingest-api-key': apiKey }
       );
     });
