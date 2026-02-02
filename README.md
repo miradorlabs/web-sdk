@@ -198,7 +198,7 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | `name` | `string` | `undefined` | Optional name of the trace |
 | `autoFlush` | `boolean` | `true` | Auto-flush after period of inactivity |
 | `flushPeriodMs` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
-| `includeClientMeta` | `boolean` | `true` | Include browser/OS metadata |
+| `includeUserMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
 | `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
@@ -402,7 +402,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
 
 ## Automatic Client Metadata Collection
 
-When `includeClientMeta: true` is set (default), the SDK automatically collects:
+When `includeUserMeta: true` is set (default), the SDK automatically collects:
 
 | Metadata | Description |
 |----------|-------------|

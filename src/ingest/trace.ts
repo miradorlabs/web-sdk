@@ -52,7 +52,7 @@ interface ResolvedTraceOptions {
   name?: string;
   autoFlush: boolean;
   flushPeriodMs: number;
-  includeClientMeta: boolean;
+  includeUserMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
   keepAliveIntervalMs: number;
@@ -106,7 +106,7 @@ export class Trace {
     this.name = options.name;
     this.autoFlush = options.autoFlush;
     this.flushPeriodMs = options.flushPeriodMs;
-    this.includeClientMeta = options.includeClientMeta;
+    this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
@@ -455,7 +455,7 @@ export class Trace {
 
     // Add pending attributes (+ user metadata on first flush)
     const allAttrs = { ...this.pendingAttributes };
-    if (this.traceId === null && this.includeClientMeta) {
+    if (this.traceId === null && this.includeUserMeta) {
       const clientMeta = getClientMetadata();
       for (const [key, value] of Object.entries(clientMeta)) {
         allAttrs[`user.${key}`] = value;

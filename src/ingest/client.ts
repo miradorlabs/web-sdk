@@ -16,7 +16,7 @@ import type { ClientOptions, TraceOptions } from './types';
 const DEFAULT_API_URL = 'https://ingest.mirador.org:443';
 const DEFAULT_AUTO_FLUSH = true;
 const DEFAULT_FLUSH_PERIOD_MS = 10;
-const DEFAULT_INCLUDE_CLIENT_META = true;
+const DEFAULT_INCLUDE_USER_META = true;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BACKOFF = 1000;
 const DEFAULT_KEEP_ALIVE_INTERVAL_MS = 10000;
@@ -86,7 +86,7 @@ export class Client {
       name: options?.name,
       autoFlush: options?.autoFlush ?? DEFAULT_AUTO_FLUSH,
       flushPeriodMs: options?.flushPeriodMs ?? DEFAULT_FLUSH_PERIOD_MS,
-      includeClientMeta: options?.includeClientMeta ?? DEFAULT_INCLUDE_CLIENT_META,
+      includeUserMeta: options?.includeUserMeta ?? DEFAULT_INCLUDE_USER_META,
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,

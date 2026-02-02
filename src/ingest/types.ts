@@ -23,7 +23,7 @@ export interface TraceOptions {
   /** Debounce period in ms before auto-flush triggers (default: 50) */
   flushPeriodMs?: number;
   /** Include browser/OS metadata in first flush (default: true) */
-  includeClientMeta?: boolean;
+  includeUserMeta?: boolean;
   /** Maximum number of retry attempts on failure (default: 3) */
   maxRetries?: number;
   /** Base delay in ms for exponential backoff between retries (default: 1000) */

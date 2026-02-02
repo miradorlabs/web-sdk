@@ -204,7 +204,7 @@ describe('Trace', () => {
     });
 
     it('should include attributes in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addAttribute('key1', 'value1')
         .addAttribute('key2', 'value2');
 
@@ -220,7 +220,7 @@ describe('Trace', () => {
     });
 
     it('should include tags in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addTags(['tag1', 'tag2']);
 
       trace.flush();
@@ -233,7 +233,7 @@ describe('Trace', () => {
     });
 
     it('should include events in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addEvent('event1', 'details1')
         .addEvent('event2', { key: 'value' });
 
@@ -251,7 +251,7 @@ describe('Trace', () => {
     });
 
     it('should include txHashHints in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addTxHint('0xabc123', 'ethereum')
         .addTxHint('0xdef456', 'polygon');
 
@@ -295,7 +295,7 @@ describe('Trace', () => {
     });
 
     it('should add stack trace via addStackTrace method', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addStackTrace('checkpoint', { stage: 'validation' });
 
       trace.flush();
@@ -314,7 +314,7 @@ describe('Trace', () => {
 
     it('should add existing stack trace', async () => {
       const capturedStack = captureStackTrace();
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeClientMeta: false })
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
         .addExistingStackTrace(capturedStack, 'deferred_trace', { reason: 'async' });
 
       trace.flush();
@@ -340,7 +340,7 @@ describe('Trace', () => {
       const trace = client.trace({
         name: 'TestTrace',
         autoFlush: false,
-        includeClientMeta: false,
+        includeUserMeta: false,
         locals: { userId, config },
       });
 
@@ -362,7 +362,7 @@ describe('Trace', () => {
       const trace = client.trace({
         name: 'TestTrace',
         autoFlush: false,
-        includeClientMeta: false,
+        includeUserMeta: false,
         locals: {
           userId: 'user-123',
           password: 'secret123',

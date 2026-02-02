@@ -91,7 +91,7 @@ elements.createTraceBtn.addEventListener('click', () => {
 
   try {
     // Initialize a new trace builder
-    currentTrace = client.trace(traceName, true); // includeClientMeta = true
+    currentTrace = client.trace(traceName, true); // includeUserMeta = true
 
     // Add default transaction attributes
     currentTrace

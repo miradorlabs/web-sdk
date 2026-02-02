@@ -113,7 +113,7 @@ Submit your trace to the Mirador Gateway:
 // The demo app uses the builder pattern like this:
 
 // 1. Create trace builder
-const trace = client.trace("swap_execution", true); // includeClientMeta
+const trace = client.trace("swap_execution", true); // includeUserMeta
 
 // 2. Add attributes
 trace
@@ -150,7 +150,7 @@ console.log("Trace ID:", response.getTraceId());
 The Mirador SDK uses a **builder pattern** for creating traces:
 
 ```javascript
-client.trace(name, includeClientMeta)
+client.trace(name, includeUserMeta)
   .addAttribute(key, value)     // Add single attribute
   .addAttributes({...})          // Add multiple attributes
   .addTag(tag)                   // Add single tag
@@ -198,7 +198,7 @@ const client = new MiradorClient(
 
 ## Client Metadata
 
-When `includeClientMeta` is `true`, the SDK automatically includes:
+When `includeUserMeta` is `true`, the SDK automatically includes:
 - Browser name and version
 - Operating system
 - Screen resolution
