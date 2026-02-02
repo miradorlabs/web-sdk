@@ -93,6 +93,7 @@ export class Trace {
   private pendingEvents: TraceEvent[] = [];
   private pendingTxHashHints: TxHashHint[] = [];
   private creationStackTrace: StackTrace | null = null;
+  private creationTimestamp: Date = new Date();
   private initEventAdded: boolean = false;
 
   // Queue for maintaining strict ordering of flushes
@@ -432,7 +433,7 @@ export class Trace {
 
       initEventMsg.setDetails(JSON.stringify(initDetails));
       const initTs = new Timestamp();
-      initTs.fromDate(new Date());
+      initTs.fromDate(this.creationTimestamp);
       initEventMsg.setTimestamp(initTs);
       traceData.addEvents(initEventMsg);
 
