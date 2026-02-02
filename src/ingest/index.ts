@@ -10,6 +10,9 @@ export { Trace } from './trace';
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './stacktrace';
 
+// Secret obfuscation utilities
+export { obfuscateSecrets } from './secrets';
+
 // Types
 export type {
   ClientOptions,

@@ -92,6 +92,7 @@ export class Client {
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
       captureStackTrace: options?.captureStackTrace ?? true,
+      locals: options?.locals,
     });
   }
 }

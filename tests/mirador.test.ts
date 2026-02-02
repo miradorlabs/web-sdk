@@ -243,9 +243,11 @@ describe('Trace', () => {
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const data = request.getData();
       const events = data!.getEventsList();
-      expect(events.length).toBe(2);
-      expect(events[0].getName()).toBe('event1');
-      expect(events[1].getName()).toBe('event2');
+      // First event is "trace init", followed by user events
+      expect(events.length).toBe(3);
+      expect(events[0].getName()).toBe('trace init');
+      expect(events[1].getName()).toBe('event1');
+      expect(events[2].getName()).toBe('event2');
     });
 
     it('should include txHashHints in TraceData', async () => {
@@ -301,9 +303,11 @@ describe('Trace', () => {
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const events = request.getData()!.getEventsList();
-      expect(events[0].getName()).toBe('checkpoint');
+      // First event is "trace init", second is the user's stack trace event
+      expect(events[0].getName()).toBe('trace init');
+      expect(events[1].getName()).toBe('checkpoint');
 
-      const details = JSON.parse(events[0].getDetails());
+      const details = JSON.parse(events[1].getDetails());
       expect(details.stage).toBe('validation');
       expect(details.stackTrace).toBeDefined();
     });
@@ -318,11 +322,70 @@ describe('Trace', () => {
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const events = request.getData()!.getEventsList();
-      expect(events[0].getName()).toBe('deferred_trace');
+      // First event is "trace init", second is the user's existing stack trace event
+      expect(events[0].getName()).toBe('trace init');
+      expect(events[1].getName()).toBe('deferred_trace');
 
-      const details = JSON.parse(events[0].getDetails());
+      const details = JSON.parse(events[1].getDetails());
       expect(details.reason).toBe('async');
       expect(details.stackTrace.frames).toEqual(capturedStack.frames);
+    });
+  });
+
+  describe('locals capture', () => {
+    it('should include locals in trace init event', async () => {
+      const userId = 'user-123';
+      const config = { debug: true, timeout: 5000 };
+
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        locals: { userId, config },
+      });
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const events = request.getData()!.getEventsList();
+      expect(events[0].getName()).toBe('trace init');
+
+      const details = JSON.parse(events[0].getDetails());
+      expect(details.locals).toBeDefined();
+      expect(details.locals.userId).toBe('user-123');
+      expect(details.locals.config.debug).toBe(true);
+      expect(details.locals.config.timeout).toBe(5000);
+    });
+
+    it('should obfuscate secrets in locals', async () => {
+      const trace = client.trace({
+        name: 'TestTrace',
+        autoFlush: false,
+        includeClientMeta: false,
+        locals: {
+          userId: 'user-123',
+          password: 'secret123',
+          apiKey: 'my-api-key',
+          config: {
+            token: 'bearer-token',
+            publicId: 'pub-123',
+          },
+        },
+      });
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const events = request.getData()!.getEventsList();
+      const details = JSON.parse(events[0].getDetails());
+
+      expect(details.locals.userId).toBe('user-123');
+      expect(details.locals.password).toBe('[REDACTED]');
+      expect(details.locals.apiKey).toBe('[REDACTED]');
+      expect(details.locals.config.token).toBe('[REDACTED]');
+      expect(details.locals.config.publicId).toBe('pub-123');
     });
   });
 
