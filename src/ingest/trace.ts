@@ -66,7 +66,7 @@ interface ResolvedTraceOptions {
 export class Trace {
   private name?: string;
   private client: TraceSubmitter;
-  private includeClientMeta: boolean;
+  private includeUserMeta: boolean;
 
   // Flush configuration
   private autoFlush: boolean;
