@@ -32,6 +32,13 @@ export interface TraceOptions {
   autoClose?: boolean;
   /** Capture stack trace at trace creation point */
   captureStackTrace?: boolean;
+  /**
+   * Local variables to capture at trace creation point.
+   * Pass an object containing variables you want to record.
+   * Secrets will be automatically obfuscated.
+   * @example { userId, config, request }
+   */
+  locals?: Record<string, unknown>;
 }
 
 /**
