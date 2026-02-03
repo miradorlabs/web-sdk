@@ -94,7 +94,6 @@ export class Trace {
   private pendingTxHashHints: TxHashHint[] = [];
   private creationStackTrace: StackTrace | null = null;
   private creationTimestamp: Date = new Date();
-  private initEventAdded: boolean = false;
 
   // Queue for maintaining strict ordering of flushes
   private flushQueue: Promise<void> = Promise.resolve();
@@ -112,6 +111,24 @@ export class Trace {
 
     // Skip 2 frames: this constructor and the trace() method that called it
     this.creationStackTrace = captureStackTrace(2);
+
+    // Add trace init event immediately with creation timestamp
+    // This ensures the init event is included in the first flush with the correct timestamp
+    const initDetails: Record<string, unknown> = {};
+    if (this.creationStackTrace) {
+      if (this.creationStackTrace.frames.length > 0) {
+        const topFrame = this.creationStackTrace.frames[0];
+        initDetails.file = topFrame.fileName;
+        initDetails.line = topFrame.lineNumber;
+        initDetails.function = topFrame.functionName;
+      }
+      initDetails.stackTrace = this.creationStackTrace.raw;
+    }
+    this.pendingEvents.push({
+      eventName: 'trace init',
+      details: JSON.stringify(initDetails),
+      timestamp: this.creationTimestamp,
+    });
 
     // Set up auto-close on page unload if enabled
     if (this.autoClose && typeof window !== 'undefined') {
@@ -410,35 +427,6 @@ export class Trace {
    */
   private buildTraceData(): TraceData {
     const traceData = new TraceData();
-
-    // Add "trace init" event on first flush with stack trace
-    if (!this.initEventAdded) {
-      const initEventMsg = new Event();
-      initEventMsg.setName('trace init');
-
-      const initDetails: Record<string, unknown> = {};
-
-      if (this.creationStackTrace) {
-        // Put file/line/function at top for quick reference
-        if (this.creationStackTrace.frames.length > 0) {
-          const topFrame = this.creationStackTrace.frames[0];
-          initDetails.file = topFrame.fileName;
-          initDetails.line = topFrame.lineNumber;
-          initDetails.function = topFrame.functionName;
-        }
-
-        // Put raw stack trace at bottom (expandable in UI)
-        initDetails.stackTrace = this.creationStackTrace.raw;
-      }
-
-      initEventMsg.setDetails(JSON.stringify(initDetails));
-      const initTs = new Timestamp();
-      initTs.fromDate(this.creationTimestamp);
-      initEventMsg.setTimestamp(initTs);
-      traceData.addEvents(initEventMsg);
-
-      this.initEventAdded = true;
-    }
 
     // Add pending attributes (+ user metadata on first flush)
     const allAttrs = { ...this.pendingAttributes };
