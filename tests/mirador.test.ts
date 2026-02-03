@@ -14,7 +14,10 @@ global.fetch = jest.fn().mockResolvedValue({
   json: () => Promise.resolve({ ip: '192.168.1.1' }),
 });
 
-// Helper to flush pending promises
+// Helper to flush microtasks
+const flushMicrotasks = () => new Promise(resolve => queueMicrotask(resolve));
+
+// Helper to flush pending promises (includes microtasks + macrotasks)
 const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
 
 // Setup browser mocks
@@ -345,6 +348,159 @@ describe('Trace', () => {
 
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('microtask batching (auto-flush)', () => {
+    it('should batch synchronous calls into a single flush', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      // Multiple synchronous calls
+      trace.addAttribute('a', '1');
+      trace.addAttribute('b', '2');
+      trace.addAttribute('c', '3');
+
+      // Not yet flushed (still in same microtask)
+      expect(mockCreateTrace).not.toHaveBeenCalled();
+
+      // Wait for microtask to execute
+      await flushMicrotasks();
+      await flushPromises();
+
+      // Should have been batched into a single CreateTrace call
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      // Verify all attributes were included
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const attrsMap = data!.getAttributesList()[0].getAttributesMap();
+      expect(attrsMap.get('a')).toBe('1');
+      expect(attrsMap.get('b')).toBe('2');
+      expect(attrsMap.get('c')).toBe('3');
+    });
+
+    it('should batch chained method calls into a single API request', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      // Chained fluent API calls
+      trace
+        .addAttribute('wallet', '0xabc')
+        .addAttribute('amount', '100')
+        .addTag('transfer')
+        .addEvent('initiated');
+
+      // Not yet flushed
+      expect(mockCreateTrace).not.toHaveBeenCalled();
+
+      await flushMicrotasks();
+      await flushPromises();
+
+      // Single batched request
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      // Verify all data was included in the single request
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const attrsMap = data!.getAttributesList()[0].getAttributesMap();
+      expect(attrsMap.get('wallet')).toBe('0xabc');
+      expect(attrsMap.get('amount')).toBe('100');
+      expect(data!.getTagsList()[0].getTagsList()).toContain('transfer');
+      // Events: trace init + initiated
+      const eventNames = data!.getEventsList().map(e => e.getName());
+      expect(eventNames).toContain('trace init');
+      expect(eventNames).toContain('initiated');
+    });
+
+    it('should batch different operation types together', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      trace.addAttribute('key', 'value');
+      trace.addTag('tag1');
+      trace.addEvent('event1');
+      trace.addTxHint('0x123', 'ethereum');
+
+      expect(mockCreateTrace).not.toHaveBeenCalled();
+
+      await flushMicrotasks();
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      expect(data!.getAttributesList().length).toBe(1);
+      expect(data!.getTagsList().length).toBe(1);
+      // Events: 1 for trace init + 1 user event
+      expect(data!.getEventsList().length).toBe(2);
+      expect(data!.getTxHashHintsList().length).toBe(1);
+    });
+
+    it('should flush immediately when flush() is called manually', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      trace.addAttribute('a', '1');
+      trace.flush(); // Manual flush
+
+      // Flush is fire-and-forget but queues the request
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle multiple flushes across different microtask cycles', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      // First batch
+      trace.addAttribute('a', '1');
+      await flushMicrotasks();
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      // Second batch (after trace is created, should use UpdateTrace)
+      trace.addAttribute('b', '2');
+      await flushMicrotasks();
+      await flushPromises();
+
+      expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not flush when autoFlush is disabled', async () => {
+      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+
+      trace.addAttribute('a', '1');
+      trace.addAttribute('b', '2');
+
+      await flushMicrotasks();
+      await flushPromises();
+
+      // No automatic flush should occur
+      expect(mockCreateTrace).not.toHaveBeenCalled();
+
+      // Manual flush should work
+      trace.flush();
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+    });
+
+    it('should cancel pending microtask flush when manual flush is called', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      trace.addAttribute('a', '1');
+      // Microtask is now scheduled
+
+      trace.flush(); // Manual flush - should clear the microtask flag
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      // The scheduled microtask should run but find nothing to flush
+      await flushMicrotasks();
+      await flushPromises();
+
+      // Still only one call
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
     });
   });
 });

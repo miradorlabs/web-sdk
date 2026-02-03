@@ -50,7 +50,6 @@ export interface TraceSubmitter {
 interface ResolvedTraceOptions {
   name?: string;
   autoFlush: boolean;
-  flushPeriodMs: number;
   includeUserMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
@@ -59,9 +58,16 @@ interface ResolvedTraceOptions {
 }
 
 /**
+ * Schedule a microtask with fallback for older browsers
+ */
+const scheduleMicrotask = typeof queueMicrotask === 'function'
+  ? queueMicrotask
+  : (cb: () => void) => Promise.resolve().then(cb);
+
+/**
  * Builder class for constructing traces with method chaining.
- * Supports auto-flush mode (default) where data is automatically sent after a period of inactivity,
- * or manual flush mode where you explicitly call flush().
+ * Supports auto-flush mode (default) where SDK calls are batched via microtask and flushed
+ * at the end of the current JS tick, or manual flush mode where you explicitly call flush().
  */
 export class Trace {
   private name?: string;
@@ -70,8 +76,7 @@ export class Trace {
 
   // Flush configuration
   private autoFlush: boolean;
-  private flushPeriodMs: number;
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private microtaskScheduled: boolean = false;
 
   // Keep-alive configuration
   private keepAliveIntervalMs: number;
@@ -102,7 +107,6 @@ export class Trace {
     this.client = client;
     this.name = options.name;
     this.autoFlush = options.autoFlush;
-    this.flushPeriodMs = options.flushPeriodMs;
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
@@ -141,25 +145,19 @@ export class Trace {
   }
 
   /**
-   * Schedule an auto-flush after the configured period.
-   * Resets the timer on each call.
-   * If flushPeriodMs is 0, flushes immediately on every call.
+   * Schedule an auto-flush via microtask.
+   * All synchronous SDK calls within the same JS tick are batched together
+   * and flushed once at the end of the microtask queue.
    */
   private scheduleFlush(): void {
     if (!this.autoFlush) return;
+    if (this.microtaskScheduled) return; // Already scheduled for this tick
 
-    // flushPeriodMs === 0 means flush immediately on every call
-    if (this.flushPeriodMs === 0) {
+    this.microtaskScheduled = true;
+    scheduleMicrotask(() => {
+      this.microtaskScheduled = false;
       this.flush();
-      return;
-    }
-
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-    }
-    this.flushTimer = setTimeout(() => {
-      this.flush();
-    }, this.flushPeriodMs);
+    });
   }
 
   /**
@@ -380,11 +378,8 @@ export class Trace {
       return;
     }
 
-    // Cancel any pending auto-flush timer
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+    // Clear microtask flag since we're flushing now
+    this.microtaskScheduled = false;
 
     // Check if there's anything to flush
     const hasPendingData =
@@ -631,11 +626,8 @@ export class Trace {
 
     this.closed = true;
 
-    // Stop all timers
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+    // Clear pending microtask and stop keep-alive
+    this.microtaskScheduled = false;
     this.stopKeepAlive();
 
     // Remove unload handler if it was registered
