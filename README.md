@@ -49,7 +49,7 @@ import { Client } from '@miradorlabs/web';
 
 const client = new Client('your-api-key');
 
-const trace = client.trace({ name: 'SwapExecution', autoFlush: false })
+const trace = client.trace({ name: 'SwapExecution', })
   .addAttribute('from', '0xabc...')
   .addTags(['dex', 'swap'])
   .addEvent('quote_received');
@@ -186,8 +186,8 @@ Creates a new trace builder.
 
 ```typescript
 const trace = client.trace({ name: 'MyTrace' });
-const trace = client.trace({ name: 'MyTrace', autoFlush: false });
-const trace = client.trace({ autoFlush: false, flushPeriodMs: 100 });
+const trace = client.trace({ name: 'MyTrace', });
+const trace = client.trace({ flushPeriodMs: 100 });
 
 // Stack trace capture is enabled by default - to disable:
 const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
@@ -196,7 +196,6 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | `string` | `undefined` | Optional name of the trace |
-| `autoFlush` | `boolean` | `true` | Auto-flush after period of inactivity |
 | `flushPeriodMs` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
 | `includeUserMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
