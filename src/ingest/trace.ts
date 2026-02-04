@@ -49,7 +49,6 @@ export interface TraceSubmitter {
 /** Options passed to MiradorTrace constructor (with defaults applied) */
 interface ResolvedTraceOptions {
   name?: string;
-  autoFlush: boolean;
   includeUserMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
@@ -75,7 +74,6 @@ export class Trace {
   private includeUserMeta: boolean;
 
   // Flush configuration
-  private autoFlush: boolean;
   private microtaskScheduled: boolean = false;
 
   // Keep-alive configuration
@@ -106,7 +104,6 @@ export class Trace {
   constructor(client: TraceSubmitter, options: ResolvedTraceOptions) {
     this.client = client;
     this.name = options.name;
-    this.autoFlush = options.autoFlush;
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
@@ -150,7 +147,6 @@ export class Trace {
    * and flushed once at the end of the microtask queue.
    */
   private scheduleFlush(): void {
-    if (!this.autoFlush) return;
     if (this.microtaskScheduled) return; // Already scheduled for this tick
 
     this.microtaskScheduled = true;
