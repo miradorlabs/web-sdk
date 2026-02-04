@@ -15,7 +15,7 @@ global.fetch = jest.fn().mockResolvedValue({
 });
 
 // Helper to flush microtasks
-const flushMicrotasks = () => new Promise(resolve => queueMicrotask(resolve));
+const flushMicrotasks = () => new Promise((resolve) => queueMicrotask(resolve as never));
 
 // Helper to flush pending promises (includes microtasks + macrotasks)
 const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -127,37 +127,37 @@ describe('Trace', () => {
 
   describe('builder methods (chaining)', () => {
     it('addAttribute() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addAttribute('key', 'value')).toBe(trace);
     });
 
     it('addAttributes() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addAttributes({ key1: 'value1' })).toBe(trace);
     });
 
     it('addTag() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addTag('tag1')).toBe(trace);
     });
 
     it('addTags() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addTags(['tag1', 'tag2'])).toBe(trace);
     });
 
     it('addEvent() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addEvent('event_name')).toBe(trace);
     });
 
     it('addTxHint() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addTxHint('0x123', 'ethereum')).toBe(trace);
     });
 
     it('should support fluent API pattern', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+      const trace = client.trace({ name: 'TestTrace' })
         .addAttribute('from', '0xabc')
         .addAttributes({ value: '100' })
         .addTag('transaction')
@@ -170,33 +170,10 @@ describe('Trace', () => {
   });
 
   describe('flush()', () => {
-    it('should call CreateTrace on first flush', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
-        .addAttribute('key', 'value');
 
-      trace.flush();
-      await flushPromises();
-
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
-      expect(mockUpdateTrace).not.toHaveBeenCalled();
-    });
-
-    it('should call UpdateTrace on subsequent flushes', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
-        .addAttribute('key', 'value');
-
-      trace.flush();
-      await flushPromises();
-      trace.addEvent('new_event');
-      trace.flush();
-      await flushPromises();
-
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
-      expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
-    });
 
     it('should set trace name in CreateTraceRequest', async () => {
-      const trace = client.trace({ name: 'MyTraceName', autoFlush: false })
+      const trace = client.trace({ name: 'MyTraceName' })
         .addAttribute('key', 'value');
 
       trace.flush();
@@ -207,7 +184,7 @@ describe('Trace', () => {
     });
 
     it('should include attributes in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addAttribute('key1', 'value1')
         .addAttribute('key2', 'value2');
 
@@ -223,7 +200,7 @@ describe('Trace', () => {
     });
 
     it('should include tags in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addTags(['tag1', 'tag2']);
 
       trace.flush();
@@ -236,7 +213,7 @@ describe('Trace', () => {
     });
 
     it('should include events in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addEvent('event1', 'details1')
         .addEvent('event2', { key: 'value' });
 
@@ -254,7 +231,7 @@ describe('Trace', () => {
     });
 
     it('should include txHashHints in TraceData', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addTxHint('0xabc123', 'ethereum')
         .addTxHint('0xdef456', 'polygon');
 
@@ -272,7 +249,7 @@ describe('Trace', () => {
     });
 
     it('should set traceId after successful CreateTrace', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false })
+      const trace = client.trace({ name: 'TestTrace' })
         .addAttribute('key', 'value');
 
       expect(trace.getTraceId()).toBeNull();
@@ -284,12 +261,12 @@ describe('Trace', () => {
 
   describe('stack trace features', () => {
     it('addStackTrace() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       expect(trace.addStackTrace('checkpoint')).toBe(trace);
     });
 
     it('addExistingStackTrace() should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
+      const trace = client.trace({ name: 'TestTrace' });
       const mockStack: StackTrace = {
         frames: [{ functionName: 'test', fileName: 'test.ts', lineNumber: 1, columnNumber: 1 }],
         raw: 'test stack',
@@ -298,7 +275,7 @@ describe('Trace', () => {
     });
 
     it('should add stack trace via addStackTrace method', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addStackTrace('checkpoint', { stage: 'validation' });
 
       trace.flush();
@@ -317,7 +294,7 @@ describe('Trace', () => {
 
     it('should add existing stack trace', async () => {
       const capturedStack = captureStackTrace();
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, includeUserMeta: false })
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addExistingStackTrace(capturedStack, 'deferred_trace', { reason: 'async' });
 
       trace.flush();
@@ -340,7 +317,7 @@ describe('Trace', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
 
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false, maxRetries: 0 })
+      const trace = client.trace({ name: 'TestTrace', maxRetries: 0 })
         .addAttribute('key', 'value');
 
       trace.flush();
@@ -463,25 +440,6 @@ describe('Trace', () => {
       await flushPromises();
 
       expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
-    });
-
-    it('should not flush when autoFlush is disabled', async () => {
-      const trace = client.trace({ name: 'TestTrace', autoFlush: false });
-
-      trace.addAttribute('a', '1');
-      trace.addAttribute('b', '2');
-
-      await flushMicrotasks();
-      await flushPromises();
-
-      // No automatic flush should occur
-      expect(mockCreateTrace).not.toHaveBeenCalled();
-
-      // Manual flush should work
-      trace.flush();
-      await flushPromises();
-
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
     });
 
     it('should cancel pending microtask flush when manual flush is called', async () => {

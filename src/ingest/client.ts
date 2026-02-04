@@ -14,7 +14,6 @@ import type { ClientOptions, TraceOptions } from './types';
 
 // Default configuration values
 const DEFAULT_API_URL = 'https://ingest.mirador.org:443';
-const DEFAULT_AUTO_FLUSH = true;
 const DEFAULT_INCLUDE_USER_META = true;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BACKOFF = 1000;
@@ -83,7 +82,6 @@ export class Client {
   trace(options?: TraceOptions): Trace {
     return new Trace(this, {
       name: options?.name,
-      autoFlush: options?.autoFlush ?? DEFAULT_AUTO_FLUSH,
       includeUserMeta: options?.includeUserMeta ?? DEFAULT_INCLUDE_USER_META,
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
