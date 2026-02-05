@@ -519,10 +519,31 @@ npm run release:minor  # 1.x.0
 npm run release:major  # x.0.0
 ```
 
+## Example Application
+
+A complete working example is available in the [`example/`](./example/) directory. It demonstrates:
+
+- Wallet connection using EIP-6963 (Multi Injected Provider Discovery)
+- Creating and managing traces
+- Adding attributes, tags, and events
+- Blockchain transaction correlation with `addTxHint()`
+- Network switching and balance display
+
+To run the example:
+
+```bash
+cd example
+npm install
+npm run build
+npm start
+```
+
+Then open <http://localhost:8000> in your browser.
+
 ## License
 
 MIT
 
 ## Author
 
-@mirador
+@miradorlabs
