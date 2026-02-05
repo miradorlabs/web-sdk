@@ -18,8 +18,6 @@ export interface ClientOptions {
 export interface TraceOptions {
   /** Trace name */
   name?: string;
-  /** Enable auto-flush mode (default: true). When enabled, SDK calls are batched via microtask and flushed at end of current JS tick. */
-  autoFlush?: boolean;
   /** Include browser/OS metadata in first flush (default: true) */
   includeUserMeta?: boolean;
   /** Maximum number of retry attempts on failure (default: 3) */

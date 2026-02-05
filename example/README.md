@@ -1,256 +1,300 @@
-# Mirador Web Client Demo
+# Mirador Web3 Demo
 
-An interactive web application demonstrating how to use the Mirador SDK to create and manage transaction traces.
+An interactive demo showcasing how to integrate the Mirador Web SDK with Web3 wallet interactions. Connect your wallet, send real transactions, and see how Mirador tracks the entire lifecycle.
 
 ## Features
 
-- **Builder Pattern Interface**: Use the fluent API to construct traces step-by-step
-- **Real-time Trace Building**: Add attributes, tags, and events dynamically
-- **Transaction Hash Support**: Optionally associate traces with blockchain transactions
-- **Activity Logging**: See all SDK operations in real-time
-- **Client Metadata**: Automatically includes browser, OS, and screen information
+- **Multi-Wallet Support**: EIP-6963 wallet discovery - select from all installed browser wallets
+- **Network Switching**: Change networks directly from the UI - supports mainnets and testnets
+- **Multi-Network Support**: Works with Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, and testnets
+- **Real Transactions**: Send actual ETH/tokens and track them with Mirador
+- **Custom Attributes**: Add custom metadata to your traces
+- **Tags**: Organize traces with custom tags
+- **Activity Log**: Real-time logging of all actions
+- **Transaction Monitoring**: Track transaction status from pending to confirmed
 
-## Getting Started
+## Prerequisites
 
-### Quick Start (Recommended)
+- Node.js 18+
+- A Web3 wallet (MetaMask, Coinbase Wallet, Rainbow, Rabby, etc.)
+- Some testnet ETH (for testing transactions)
+- A Mirador API key
 
-The easiest way to run the demo:
+## Quick Start
+
+### 1. Install Demo Dependencies
 
 ```bash
-cd ./example
+cd example
 npm install
+```
+
+### 2. Build and Run
+
+The simplest way to run everything:
+
+```bash
 npm run dev
 ```
 
 This will:
-1. Install dependencies (Rollup)
-2. Bundle from TypeScript source
-3. Compile TypeScript and bundle everything
-4. Start a local web server
-5. Open your browser automatically
 
-That's it! The demo will be running at http://localhost:8000
+1. Build the SDK
+2. Bundle the demo application
+3. Start the CORS proxy server
+4. Serve the demo at `http://localhost:8000`
 
-### Manual Setup
+### Alternative: Step by Step
 
-If you prefer to run it manually:
+If you prefer to run things separately:
 
 ```bash
-# 1. Install dependencies
-npm install
+# Terminal 1: Start the proxy server (helps avoid CORS issues)
+npm run proxy
 
-# 2. Build the bundle
-npm run build
-
-# 3. Start a web server
-npm start           # Using Python
-# OR
-npm run serve       # Using http-server (auto-opens browser)
+# Terminal 2: Build and serve
+npm run serve
 ```
 
-### Alternative: Using VS Code Live Server
-1. Run `npm run build` to create the bundle
-2. Install the "Live Server" extension in VS Code
-3. Right-click on `index.html`
-4. Select "Open with Live Server"
+Or build without serving:
 
-## How to Use
-
-### Step 1: Create a Trace
-1. Fill in the trace name (e.g., "swap_execution", "payment_flow")
-2. Enter transaction details:
-   - From address
-   - To address
-   - Value (in ETH)
-   - Network (Ethereum, Polygon, etc.)
-3. Click "Create Trace"
-
-This initializes a trace builder with:
-- Default transaction attributes
-- Network-specific tags
-- Automatic client metadata (browser, OS, screen size, etc.)
-
-### Step 2: Add Custom Attributes (Optional)
-Add any custom key-value pairs to enrich your trace:
-- `slippage_bps`: "50"
-- `gas_limit`: "21000"
-- `dex`: "uniswap"
-- Any other relevant metadata
-
-### Step 3: Add Tags (Optional)
-Add tags to categorize your trace:
-- "dex"
-- "swap"
-- "critical"
-- "production"
-
-### Step 4: Add Events (Optional)
-Track important moments in the transaction lifecycle:
-- Event name: "wallet_connected"
-- Details: `{"wallet": "MetaMask", "version": "10.0.0"}`
-
-Or:
-- Event name: "quote_received"
-- Details: (leave empty for timestamp-only events)
-
-**JSON Support**: If your details start with `{` or `[`, they'll be parsed as JSON automatically.
-
-### Step 5: Submit the Trace
-Submit your trace to the Mirador Gateway:
-
-**Without Transaction Hash:**
-- Just click "Submit Trace"
-- Use this when you don't have a blockchain tx hash yet
-
-**With Transaction Hash:**
-- Enter the transaction hash
-- Enter the chain ID (1 for Ethereum, 137 for Polygon, etc.)
-- Click "Submit Trace"
-
-## Example Usage Flow
-
-```javascript
-// The demo app uses the builder pattern like this:
-
-// 1. Create trace builder
-const trace = client.trace("swap_execution", true); // includeUserMeta
-
-// 2. Add attributes
-trace
-  .addAttribute("from", "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb")
-  .addAttribute("to", "0x1234567890123456789012345678901234567890")
-  .addAttribute("value", "0.5")
-  .addAttribute("network", "ethereum")
-  .addAttribute("slippage_bps", "50");
-
-// 3. Add tags
-trace
-  .addTag("dex")
-  .addTag("swap")
-  .addTag("uniswap");
-
-// 4. Add events
-trace
-  .addEvent("wallet_connected", { wallet: "MetaMask" })
-  .addEvent("quote_received", { amount: "0.5 ETH", price: "$2000" })
-  .addEvent("tx_signed");
-
-// 5. Submit with transaction hash
-const response = await trace.submit(
-  "0x1234567890abcdef...", // txHash
-  "1",                     // chainId (Ethereum)
-  "Swap transaction"       // details (optional)
-);
-
-console.log("Trace ID:", response.getTraceId());
+```bash
+npm run build        # Build SDK + bundle
+npm run dev:no-proxy # Build and serve without proxy
 ```
 
-## Understanding the Builder Pattern
+## Usage
 
-The Mirador SDK uses a **builder pattern** for creating traces:
+### 1. Enter Your API Key
 
-```javascript
-client.trace(name, includeUserMeta)
-  .addAttribute(key, value)     // Add single attribute
-  .addAttributes({...})          // Add multiple attributes
-  .addTag(tag)                   // Add single tag
-  .addTags([...])                // Add multiple tags
-  .addEvent(name, details, ts)   // Add event
-  .setTxHash(hash, chainId)      // Set transaction hash
-  .submit()                      // Submit without tx hash
-  .submit(hash, chainId)         // Submit with tx hash
-```
+Enter your Mirador API key to initialize the SDK. The key is saved to localStorage for convenience.
 
-**Benefits:**
-- ✅ Method chaining for clean, readable code
-- ✅ All data collected before submission
-- ✅ Type-safe with TypeScript
-- ✅ Automatic JSON stringification for objects
-- ✅ Optional client metadata collection
+### 2. Select and Connect Your Wallet
 
-## Activity Log
+The demo uses EIP-6963 to discover all installed wallet extensions. You'll see a list of available wallets - click one to select it, then click "Connect Selected Wallet".
 
-The demo includes a real-time activity log showing:
-- ✅ Successful operations (green)
-- ❌ Errors (red)
-- ℹ️  Information messages (blue)
-- ⚠️  Warnings (yellow)
+Supported wallets include:
 
-All SDK operations are logged with timestamps for debugging.
+- MetaMask
+- Coinbase Wallet
+- Rainbow
+- Rabby
+- And any other EIP-6963 compatible wallet
 
-## API Configuration
+### 3. Switch Networks (Optional)
 
-By default, the demo connects to:
-```javascript
-const client = new Client(
-  'demo-api-key',
-  'https://ingest-gateway-dev.mirador.org:443'
-);
-```
+Click the network name next to your wallet to open the network selector. You can switch between:
 
-To use a different endpoint, modify `app.js`:
-```javascript
-const client = new MiradorClient(
-  'your-api-key',
-  'https://your-gateway-url:port'
-);
-```
+- **Mainnets**: Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain
+- **Testnets**: Sepolia, Polygon Amoy, Arbitrum Sepolia, Optimism Sepolia, Base Sepolia, BNB Testnet
 
-## Client Metadata
+If the network isn't in your wallet, it will be automatically added.
 
-When `includeUserMeta` is `true`, the SDK automatically includes:
-- Browser name and version
-- Operating system
-- Screen resolution
-- Viewport size
-- User agent
-- Language
-- Timezone
-- Current URL
-- Referrer
+### 4. Add Custom Attributes (Optional)
 
-All metadata is prefixed with `client.*` (e.g., `client.browser`, `client.os`)
+Before sending a transaction, you can add:
+- **Custom Attributes**: Key-value pairs for additional context (e.g., `purpose: payment`)
+- **Tags**: Labels for organizing and filtering traces (e.g., `urgent`, `business`)
 
-## Troubleshooting
+### 5. Send a Transaction
 
-### CORS Errors
-If you see CORS errors in the console:
-- Make sure you're serving the files via HTTP (not opening `file://` directly)
-- Check that the Mirador Gateway allows requests from your origin
+1. Enter a recipient address
+2. Enter an amount (use a small amount on testnet!)
+3. Optionally customize the trace name
+4. Click "Send Transaction"
+5. Confirm the transaction in your wallet
 
-### Import Errors
-If you see module import errors:
-- Ensure the SDK is built: `npm run build`
-- Check that `dist/index.esm.js` exists
-- Verify you're using a browser that supports ES modules
+### 6. View the Trace
 
-### Connection Errors
-If trace submission fails:
-- Check that the gateway URL is correct
-- Verify your API key is valid
-- Check the browser console for detailed error messages
-- Look at the Activity Log for specific error details
+After the transaction is sent, you'll see:
+- The Mirador Trace ID
+- The transaction hash
+- Real-time status updates (Pending → Confirmed)
 
-## Code Structure
+The trace is automatically closed when the transaction confirms, fails, or times out.
+
+## Supported Networks
+
+| Network | Chain ID | Symbol | Mirador Chain |
+| ------- | -------- | ------ | ------------- |
+| Ethereum | 1 | ETH | ethereum |
+| Sepolia | 11155111 | ETH | ethereum |
+| Polygon | 137 | MATIC | polygon |
+| Polygon Amoy | 80002 | MATIC | polygon |
+| Arbitrum One | 42161 | ETH | arbitrum |
+| Arbitrum Sepolia | 421614 | ETH | arbitrum |
+| Optimism | 10 | ETH | optimism |
+| Optimism Sepolia | 11155420 | ETH | optimism |
+| Base | 8453 | ETH | base |
+| Base Sepolia | 84532 | ETH | base |
+| BNB Chain | 56 | BNB | bsc |
+| BNB Testnet | 97 | BNB | bsc |
+
+## Getting Testnet ETH
+
+To test transactions without spending real money:
+
+- **Sepolia**: https://sepoliafaucet.com/
+- **Goerli**: https://goerlifaucet.com/
+- **Polygon Mumbai**: https://faucet.polygon.technology/
+
+## Development
+
+### Project Structure
 
 ```
 example/
-├── index.html          # Main HTML page with styles
-├── app.js              # Application logic using Mirador SDK
-└── README.md           # This file
+├── index.html        # Main HTML with UI and styles
+├── app.js            # Application logic (wallet, transactions, traces)
+├── bundle.js         # Built bundle (generated)
+├── proxy-server.js   # CORS proxy for Mirador gateway
+├── rollup.config.js  # Rollup configuration
+└── package.json
 ```
 
-The demo is intentionally simple (vanilla JavaScript + HTML/CSS) to focus on SDK usage without framework complexity.
+### Available Scripts
 
-## Next Steps
+| Script | Description |
+|--------|-------------|
+| `npm run build` | Build SDK and bundle the demo |
+| `npm run build-sdk` | Build only the parent SDK |
+| `npm run proxy` | Start the CORS proxy server |
+| `npm run serve` | Build and serve the demo |
+| `npm run dev` | Build, start proxy, and serve (all in one) |
+| `npm run dev:no-proxy` | Build and serve without proxy |
 
-After exploring the demo:
-1. Check the Activity Log to see all SDK operations
-2. Open the browser DevTools to see network requests
-3. Modify `app.js` to experiment with different trace patterns
-4. Integrate the builder pattern into your own application
+### Modifying the Demo
+
+1. Edit `app.js` for logic changes
+2. Edit `index.html` for UI changes
+3. Run `npm run build` to rebuild the bundle
+4. Refresh the browser to see changes
+
+## How It Works
+
+### Wallet Discovery (EIP-6963)
+
+The demo uses EIP-6963 for multi-wallet discovery:
+
+```javascript
+// Listen for wallet announcements
+window.addEventListener('eip6963:announceProvider', (event) => {
+  const { info, provider } = event.detail;
+  // info contains: name, icon, rdns, uuid
+  // provider is the EIP-1193 provider
+});
+
+// Request all wallets to announce themselves
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+```
+
+### Transaction Flow
+
+1. **Wallet Connection**: User selects a wallet, connects via EIP-1193 provider
+2. **Trace Creation**: Creates a Mirador trace with wallet and transaction metadata
+3. **Transaction Submission**: Sends the transaction via the selected wallet
+4. **Trace Association**: Links the transaction hash via `addTxHint()`
+5. **Confirmation Polling**: Monitors the transaction until confirmed on-chain
+6. **Trace Close**: Closes the trace with confirmation details
+
+### Example Trace Data
+
+When you send a transaction, the following data is automatically captured:
+
+```javascript
+{
+  name: "web3_transfer",
+  attributes: {
+    "wallet.address": "0x742d...0bEb",
+    "wallet.type": "injected",
+    "network.name": "Sepolia Testnet",
+    "network.chainId": "11155111",
+    "transaction.type": "transfer",
+    "transaction.to": "0x1234...7890",
+    "transaction.value": "0.001",
+    "transaction.valueWei": "1000000000000000"
+  },
+  tags: ["web3", "transfer", "sepolia-testnet"],
+  events: [
+    { name: "trace init", data: {...} },
+    { name: "transaction_initiated", data: { from, to, value } },
+    { name: "transaction_sent", data: { txHash } },
+    { name: "transaction_confirmed", data: { success, blockNumber, txHash } }
+  ],
+  txHashHints: [
+    { txHash: "0x...", chain: "ethereum", details: "ETH Transfer" }
+  ]
+}
+```
+
+### SDK Usage Pattern
+
+```javascript
+import { Client } from '@miradorlabs/web';
+
+// 1. Initialize the client
+const client = new Client('your-api-key', 'https://ingest-gateway.mirador.org');
+
+// 2. Create a trace (second param enables user metadata collection)
+const trace = client.trace('web3_transfer', true);
+
+// 3. Add attributes
+trace
+  .addAttribute('wallet.address', walletAddress)
+  .addAttribute('network.chainId', chainId)
+  .addAttribute('transaction.value', amount);
+
+// 4. Add tags
+trace.addTags(['web3', 'transfer']);
+
+// 5. Add events as they happen
+trace.addEvent('transaction_initiated', { from, to, value });
+
+// 6. After getting tx hash, add it as a hint for blockchain correlation
+trace.addTxHint(txHash, 'ethereum', 'ETH Transfer');
+
+// 7. The trace auto-flushes, but you can force it
+trace.flush();
+
+// 8. Get the trace ID (available after flush completes)
+const traceId = trace.getTraceId();
+
+// 9. When done, close the trace
+await trace.close('Transaction confirmed');
+```
+
+## Troubleshooting
+
+### "No wallets detected"
+Install a Web3 wallet browser extension (MetaMask, Coinbase Wallet, etc.).
+
+### "Please select a wallet first"
+Click on one of the wallet options to select it before connecting.
+
+### "Proxy server not running"
+Make sure to run `npm run proxy` in a separate terminal, or use `npm run dev` which starts it automatically.
+
+### "Insufficient balance"
+Get some testnet ETH from a faucet (links above).
+
+### Transaction stuck on "Pending"
+This can happen on congested networks. The demo will wait up to 2 minutes for confirmation.
+
+### CORS Errors
+Make sure the proxy server is running (`npm run proxy`).
+
+### Network Not Supported
+Switch to a supported network in your wallet. The demo will automatically detect the change.
+
+### Build Errors
+
+Make sure you've built the parent SDK first:
+
+```bash
+cd .. && npm install && npm run build
+```
 
 ## Learn More
 
 - [Mirador SDK Documentation](../README.md)
-- [API Reference](../src/ingest/index.ts)
+- [EIP-6963 Specification](https://eips.ethereum.org/EIPS/eip-6963)

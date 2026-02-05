@@ -8,9 +8,9 @@
     "build": "npm run build-sdk && rollup -c",
     "proxy": "node proxy-server.js",
     "start": "npm run build && python3 -m http.server 8000",
-    "serve": "npm run build && npx http-server -p 8000 -o",
-    "dev": "npm run build && npx concurrently \"npm run proxy\" \"npx http-server -p 8000 -o\"",
-    "dev:no-proxy": "npm run build && npx http-server -p 8000 -o"
+    "serve": "npm run build && npx http-server -a 127.0.0.1 -p 8000 -c-1 -o",
+    "dev": "npm run build && npx concurrently \"npm run proxy\" \"npx http-server -a 127.0.0.1 -p 8000 -c-1 -o\"",
+    "dev:no-proxy": "npm run build && npx http-server -a 127.0.0.1 -p 8000 -c-1 -o"
   },
   "keywords": [
     "mirador",
@@ -21,12 +21,19 @@
   "author": "@miradorlabs",
   "license": "ISC",
   "devDependencies": {
+    "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
-    "rollup": "^4.53.3"
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.0",
+    "rollup": "^4.53.3",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@miradorlabs/web": "file:..",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
+    "ethers": "^6.13.0",
     "express": "^4.22.1",
     "http-proxy-middleware": "^3.0.3"
   }

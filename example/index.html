@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trace Demo</title>
+  <title>Mirador Web3 Demo</title>
   <style>
     * {
       margin: 0;
@@ -13,227 +13,349 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
       min-height: 100vh;
       padding: 20px;
+      color: #e4e4e4;
     }
 
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      padding: 30px;
     }
 
-    h1 {
-      color: #333;
-      margin-bottom: 10px;
-      font-size: 28px;
-    }
-
-    .subtitle {
-      color: #666;
+    .header {
+      text-align: center;
       margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header .subtitle {
+      color: #8892b0;
       font-size: 14px;
     }
 
-    .section {
-      margin-bottom: 30px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e9ecef;
+    .card {
+      position: relative;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
     }
 
-    .section h2 {
-      color: #495057;
+    .card h2 {
       font-size: 18px;
-      margin-bottom: 15px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card h2 .icon {
+      font-size: 24px;
+    }
+
+    /* Wallet Connection */
+    .wallet-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .wallet-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .wallet-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .wallet-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wallet-address {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      color: #e4e4e4;
+    }
+
+    .wallet-address-row {
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    .section h2::before {
-      content: "→";
-      color: #667eea;
-      font-weight: bold;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 5px;
-      color: #495057;
-      font-weight: 500;
-      font-size: 14px;
-    }
-
-    input, select, textarea {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      font-size: 14px;
-      font-family: inherit;
-      transition: border-color 0.2s;
-    }
-
-    input:focus, select:focus, textarea:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    textarea {
-      resize: vertical;
-      min-height: 80px;
-      font-family: 'Monaco', 'Courier New', monospace;
-    }
-
-    .input-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 15px;
-    }
-
-    button {
-      background: #667eea;
-      color: white;
+    .copy-btn {
+      background: none;
       border: none;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #8892b0;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e4e4e4;
+    }
+
+    .copy-btn.copied {
+      color: #4ade80;
+    }
+
+    .wallet-balance {
+      font-size: 12px;
+      color: #8892b0;
+    }
+
+    .network-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(102, 126, 234, 0.2);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 20px;
+      font-size: 12px;
+      color: #667eea;
+    }
+
+    .network-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    /* Buttons */
+    .btn {
       padding: 12px 24px;
-      border-radius: 6px;
+      border-radius: 12px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
-      width: 100%;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    button:hover {
-      background: #5568d3;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
     }
 
-    button:active {
-      transform: translateY(0);
-    }
-
-    button:disabled {
-      background: #adb5bd;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-
-    .button-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
     }
 
     .btn-secondary {
-      background: #6c757d;
+      background: rgba(255, 255, 255, 0.1);
+      color: #e4e4e4;
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .btn-secondary:hover {
-      background: #5a6268;
-    }
-
-    .btn-danger {
-      background: #dc3545;
-    }
-
-    .btn-danger:hover {
-      background: #c82333;
+      background: rgba(255, 255, 255, 0.15);
     }
 
     .btn-success {
-      background: #28a745;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
     }
 
     .btn-success:hover {
-      background: #218838;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
     }
 
-    .status {
-      padding: 15px;
-      border-radius: 6px;
-      margin-top: 15px;
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: #8892b0;
+      font-weight: 500;
+    }
+    #walletCard {
+      z-index: 10;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      color: #e4e4e4;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    .form-group input::placeholder {
+      color: #4a5568;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+
+    /* Transaction Preview */
+    .tx-preview {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .tx-preview-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 13px;
+    }
+
+    .tx-preview-row:last-child {
+      border-bottom: none;
+    }
+
+    .tx-preview-label {
+      color: #8892b0;
+    }
+
+    .tx-preview-value {
+      color: #e4e4e4;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    /* Status Messages */
+    .status-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 12px;
       font-size: 14px;
       display: none;
+      z-index: 1000;
+      animation: slideUp 0.3s ease;
     }
 
-    .status.show {
-      display: block;
+    .status-bar.show {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .status.success {
-      background: #d4edda;
-      border: 1px solid #c3e6cb;
-      color: #155724;
+    .status-bar.success {
+      background: rgba(16, 185, 129, 0.9);
+      color: white;
     }
 
-    .status.error {
-      background: #f8d7da;
-      border: 1px solid #f5c6cb;
-      color: #721c24;
+    .status-bar.error {
+      background: rgba(239, 68, 68, 0.9);
+      color: white;
     }
 
-    .status.info {
-      background: #d1ecf1;
-      border: 1px solid #bee5eb;
-      color: #0c5460;
+    .status-bar.info {
+      background: rgba(102, 126, 234, 0.9);
+      color: white;
     }
 
-    .trace-info {
-      background: #e7f3ff;
-      border: 1px solid #b3d9ff;
-      padding: 15px;
-      border-radius: 6px;
-      margin-top: 15px;
-      display: none;
+    .status-bar.pending {
+      background: rgba(245, 158, 11, 0.9);
+      color: white;
     }
 
-    .trace-info.show {
-      display: block;
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
     }
 
-    .trace-info strong {
-      color: #004085;
-    }
-
-    .trace-info code {
-      background: white;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-family: 'Monaco', 'Courier New', monospace;
-      font-size: 12px;
-      color: #495057;
-    }
-
+    /* Activity Log */
     .log {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      padding: 15px;
-      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 16px;
       font-family: 'Monaco', 'Courier New', monospace;
       font-size: 12px;
       max-height: 300px;
       overflow-y: auto;
-      line-height: 1.6;
+      line-height: 1.8;
     }
 
     .log-entry {
-      margin-bottom: 8px;
       padding: 4px 0;
-      border-bottom: 1px solid #333;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .log-entry:last-child {
@@ -241,228 +363,524 @@
     }
 
     .log-time {
-      color: #858585;
+      color: #4a5568;
     }
 
-    .log-success {
-      color: #4ec9b0;
-    }
+    .log-success { color: #4ade80; }
+    .log-error { color: #f87171; }
+    .log-info { color: #60a5fa; }
+    .log-warn { color: #fbbf24; }
 
-    .log-error {
-      color: #f48771;
-    }
-
-    .log-info {
-      color: #569cd6;
-    }
-
-    .log-warn {
-      color: #dcdcaa;
-    }
-
-    .chip {
-      display: inline-block;
-      background: #e9ecef;
-      padding: 4px 10px;
+    /* Trace Info Card */
+    .trace-card {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+      border: 1px solid rgba(102, 126, 234, 0.2);
       border-radius: 12px;
-      font-size: 12px;
-      margin-right: 5px;
-      margin-bottom: 5px;
-      color: #495057;
+      padding: 16px;
+      margin-top: 16px;
     }
 
+    .trace-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .trace-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .trace-card-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      font-size: 11px;
+      color: #4ade80;
+    }
+
+    .trace-card code {
+      display: block;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      word-break: break-all;
+      color: #e4e4e4;
+    }
+
+    /* Hidden state */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .form-row, .form-row-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-section {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+
+    /* Tags */
     .tags-container {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 10px;
-      min-height: 30px;
-      padding: 10px;
-      background: white;
-      border-radius: 6px;
-      border: 1px solid #ced4da;
+      gap: 8px;
+      margin-top: 12px;
     }
 
-    .attributes-container {
-      background: white;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ced4da;
-      margin-top: 10px;
-      min-height: 60px;
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      font-size: 12px;
+      color: #e4e4e4;
     }
 
-    .attribute-item {
+    .tag-remove {
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+
+    .tag-remove:hover {
+      opacity: 1;
+    }
+
+    /* Attributes */
+    .attributes-list {
+      margin-top: 12px;
+    }
+
+    .attribute-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
       margin-bottom: 8px;
       font-size: 13px;
-      font-family: 'Monaco', 'Courier New', monospace;
     }
 
     .attribute-key {
       color: #667eea;
-      font-weight: 600;
+      font-weight: 500;
+      min-width: 120px;
     }
 
     .attribute-value {
-      color: #495057;
+      color: #e4e4e4;
+      flex: 1;
+      font-family: 'Monaco', 'Courier New', monospace;
     }
 
-    .hidden {
+    /* Wallet Selector */
+    .wallet-selector {
+      margin-bottom: 16px;
+    }
+
+    .wallet-selector-label {
+      font-size: 13px;
+      color: #8892b0;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .wallet-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 8px;
+    }
+
+    .wallet-option:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(102, 126, 234, 0.3);
+    }
+
+    .wallet-option.selected {
+      background: rgba(102, 126, 234, 0.15);
+      border-color: #667eea;
+    }
+
+    .wallet-option-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+    }
+
+    .wallet-option-name {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: #e4e4e4;
+    }
+
+    .wallet-option-check {
+      color: #667eea;
+      font-size: 16px;
+    }
+
+    /* Network Selector */
+    .network-selector {
+      position: relative;
+    }
+
+    .network-selector-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      color: #e4e4e4;
+    }
+
+    .network-selector-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(102, 126, 234, 0.3);
+    }
+
+    .network-selector-btn .network-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    .network-selector-btn .chevron {
+      margin-left: 4px;
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .network-selector.open .chevron {
+      transform: rotate(180deg);
+    }
+
+    .network-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 220px;
+      background: rgba(22, 33, 62, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 8px;
+      z-index: 100;
       display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .network-selector.open .network-dropdown {
+      display: block;
+    }
+
+    .network-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      color: #e4e4e4;
+    }
+
+    .network-dropdown-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .network-dropdown-item.active {
+      background: rgba(102, 126, 234, 0.2);
+    }
+
+    .network-dropdown-item .network-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .network-dropdown-item .network-info {
+      flex: 1;
+    }
+
+    .network-dropdown-item .network-name {
+      font-weight: 500;
+    }
+
+    .network-dropdown-item .network-type {
+      font-size: 11px;
+      color: #8892b0;
+    }
+
+    .network-dropdown-item .network-check {
+      color: #667eea;
+      font-size: 14px;
+    }
+
+    .network-dropdown-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+      margin: 8px 0;
+    }
+
+    .network-dropdown-label {
+      padding: 6px 12px;
+      font-size: 11px;
+      color: #8892b0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🔍 Mirador Trace Builder</h1>
-    <p class="subtitle">Create and manage transaction traces with the Mirador SDK</p>
-    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 10px; border-radius: 6px; margin-bottom: 20px; font-size: 13px;">
-      <strong>🔧 Proxy Mode:</strong> <span id="proxyStatus">Checking...</span>
+    <div class="header">
+      <h1>Mirador Web3 Demo</h1>
+      <p class="subtitle">Connect your wallet, send transactions, and track them with Mirador</p>
     </div>
 
-    <!-- Step 1: Create Trace -->
-    <div class="section">
-      <h2>Create New Trace</h2>
+    <!-- API Key Card -->
+    <div id="apiKeyCard" class="card">
+      <h2><span class="icon">&#128273;</span> Step 1: Enter API Key</h2>
+      <p style="color: #8892b0; margin-bottom: 16px;">Enter your Mirador API key to get started. You can get one from your project settings.</p>
+
+      <div class="form-group">
+        <label for="apiKeyInput">API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="Enter your Mirador API key...">
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button id="saveApiKeyBtn" class="btn btn-primary" style="flex: 1;">
+          <span>&#128275;</span> Save & Continue
+        </button>
+        <button id="toggleApiKeyBtn" class="btn btn-secondary" style="width: auto; padding: 12px;">
+          <span id="toggleApiKeyIcon">&#128065;</span>
+        </button>
+      </div>
+
+      <div id="apiKeySuccess" class="hidden" style="margin-top: 16px; padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span style="color: #4ade80; font-size: 13px;">&#10003; API key configured</span>
+          <button id="changeApiKeyBtn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Change</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wallet Connection Card -->
+    <div id="walletCard" class="card hidden">
+      <h2><span class="icon">&#128274;</span> Step 2: Connect Wallet</h2>
+
+      <div id="walletNotConnected">
+        <div class="wallet-selector">
+          <span class="wallet-selector-label">Select a wallet to connect:</span>
+          <div id="walletSelectorContainer">
+            <div style="text-align: center; padding: 20px; color: #8892b0;">
+              <span class="spinner"></span>
+              <p style="margin-top: 8px;">Discovering wallets...</p>
+            </div>
+          </div>
+        </div>
+        <button id="connectWalletBtn" class="btn btn-primary" style="width: 100%;">
+          <span>&#128279;</span> Connect Selected Wallet
+        </button>
+      </div>
+
+      <div id="walletConnected" class="wallet-section hidden">
+        <div class="wallet-info">
+          <div class="wallet-avatar">&#129302;</div>
+          <div class="wallet-details">
+            <div class="wallet-address-row">
+              <span id="walletAddress" class="wallet-address">0x0000...0000</span>
+              <button id="copyAddressBtn" class="copy-btn" title="Copy address">&#128203;</button>
+            </div>
+            <span id="walletBalance" class="wallet-balance">0.00 ETH</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div id="networkSelector" class="network-selector">
+            <button id="networkSelectorBtn" class="network-selector-btn">
+              <span class="network-dot"></span>
+              <span id="networkName">Unknown Network</span>
+              <span class="chevron">&#9660;</span>
+            </button>
+            <div id="networkDropdown" class="network-dropdown">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+          <button id="disconnectWalletBtn" class="btn btn-secondary">Disconnect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Send Transaction Card -->
+    <div id="transactionCard" class="card hidden">
+      <h2><span class="icon">&#128640;</span> Step 3: Send Transaction</h2>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="recipientAddress">Recipient Address</label>
+          <input type="text" id="recipientAddress" placeholder="0x...">
+        </div>
+        <div class="form-group">
+          <label for="sendAmount">Amount (ETH)</label>
+          <input type="text" id="sendAmount" placeholder="0.01" value="0.001">
+        </div>
+      </div>
 
       <div class="form-group">
         <label for="traceName">Trace Name</label>
-        <input type="text" id="traceName" placeholder="e.g., swap_execution, payment_flow" value="demo_transaction">
+        <input type="text" id="traceName" placeholder="e.g., payment_to_friend" value="web3_transfer">
       </div>
 
-      <div class="form-group">
-        <label>Transaction Data</label>
-        <div class="input-group">
-          <div>
-            <label for="fromAddress">From Address</label>
-            <input type="text" id="fromAddress" placeholder="0xabc..." value="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb">
-          </div>
-          <div>
-            <label for="toAddress">To Address</label>
-            <input type="text" id="toAddress" placeholder="0xdef..." value="0x1234567890123456789012345678901234567890">
-          </div>
+      <!-- Transaction Preview -->
+      <div class="tx-preview">
+        <div class="tx-preview-row">
+          <span class="tx-preview-label">From</span>
+          <span id="previewFrom" class="tx-preview-value">-</span>
+        </div>
+        <div class="tx-preview-row">
+          <span class="tx-preview-label">To</span>
+          <span id="previewTo" class="tx-preview-value">-</span>
+        </div>
+        <div class="tx-preview-row">
+          <span class="tx-preview-label">Amount</span>
+          <span id="previewAmount" class="tx-preview-value">-</span>
+        </div>
+        <div class="tx-preview-row">
+          <span class="tx-preview-label">Network</span>
+          <span id="previewNetwork" class="tx-preview-value">-</span>
         </div>
       </div>
 
-      <div class="form-group">
-        <div class="input-group">
-          <div>
-            <label for="value">Value (ETH)</label>
-            <input type="text" id="value" placeholder="0.1" value="0.5">
-          </div>
-          <div>
-            <label for="network">Network</label>
-            <select id="network">
-              <option value="ethereum">Ethereum</option>
-              <option value="polygon">Polygon</option>
-              <option value="arbitrum">Arbitrum</option>
-              <option value="optimism">Optimism</option>
-            </select>
-          </div>
-        </div>
+      <div style="margin-top: 20px; display: flex; gap: 12px;">
+        <button id="sendTxBtn" class="btn btn-success" style="flex: 1;">
+          <span>&#9889;</span> Send Transaction
+        </button>
       </div>
 
-      <button id="createTraceBtn">Create Trace</button>
-
-      <div id="traceInfo" class="trace-info">
-        <strong>Trace Created!</strong><br>
-        <div style="margin-top: 8px;">
-          Trace ID: <code id="traceId"></code><br>
-          Transaction ID: <code id="txId"></code>
+      <!-- Trace Info (shown after transaction) -->
+      <div id="traceInfo" class="trace-card hidden">
+        <div class="trace-card-header">
+          <span class="trace-card-title">Mirador Trace Created</span>
+          <span id="traceStatus" class="trace-card-status">
+            <span class="spinner"></span> Pending
+          </span>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <label style="font-size: 11px; color: #8892b0;">Trace ID</label>
+          <code id="traceId">-</code>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #8892b0;">Transaction Hash</label>
+          <code id="txHash">-</code>
         </div>
       </div>
     </div>
 
-    <!-- Step 2: Add Attributes -->
-    <div id="attributesSection" class="section hidden">
-      <h2>Add Custom Attributes</h2>
+    <!-- Custom Attributes Card -->
+    <div id="attributesCard" class="card hidden">
+      <h2><span class="icon">&#128203;</span> Custom Attributes & Tags</h2>
 
-      <div class="input-group">
+      <div class="form-row-3">
         <div class="form-group">
           <label for="attrKey">Attribute Key</label>
-          <input type="text" id="attrKey" placeholder="e.g., slippage_bps, gas_limit">
+          <input type="text" id="attrKey" placeholder="e.g., purpose">
         </div>
         <div class="form-group">
           <label for="attrValue">Attribute Value</label>
-          <input type="text" id="attrValue" placeholder="e.g., 50, 21000">
+          <input type="text" id="attrValue" placeholder="e.g., payment">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button id="addAttributeBtn" class="btn btn-secondary" style="width: 100%;">Add</button>
         </div>
       </div>
 
-      <button id="addAttributeBtn" class="btn-secondary">Add Attribute</button>
+      <div id="attributesList" class="attributes-list"></div>
 
-      <div class="attributes-container" id="attributesContainer">
-        <em style="color: #6c757d; font-size: 13px;">No custom attributes added yet</em>
+      <div class="form-row" style="margin-top: 16px;">
+        <div class="form-group">
+          <label for="tagInput">Add Tag</label>
+          <input type="text" id="tagInput" placeholder="e.g., urgent, business">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button id="addTagBtn" class="btn btn-secondary" style="width: 100%;">Add Tag</button>
+        </div>
       </div>
+
+      <div id="tagsContainer" class="tags-container"></div>
     </div>
 
-    <!-- Step 3: Add Tags -->
-    <div id="tagsSection" class="section hidden">
-      <h2>Add Tags</h2>
-
-      <div class="form-group">
-        <label for="tagInput">Tag Name</label>
-        <input type="text" id="tagInput" placeholder="e.g., dex, swap, critical">
-      </div>
-
-      <button id="addTagBtn" class="btn-secondary">Add Tag</button>
-
-      <div class="tags-container" id="tagsContainer">
-        <em style="color: #6c757d; font-size: 13px;">No tags added yet</em>
-      </div>
-    </div>
-
-    <!-- Step 4: Add Events -->
-    <div id="eventsSection" class="section hidden">
-      <h2>Add Events</h2>
-
-      <div class="form-group">
-        <label for="eventName">Event Name</label>
-        <input type="text" id="eventName" placeholder="e.g., wallet_connected, quote_received">
-      </div>
-
-      <div class="form-group">
-        <label for="eventDetails">Event Details (JSON or text)</label>
-        <textarea id="eventDetails" placeholder='{"amount": 100, "currency": "USD"}'></textarea>
-      </div>
-
-      <button id="addEventBtn" class="btn-secondary">Add Event</button>
-    </div>
-
-    <!-- Step 5: Submit with Transaction Hash -->
-    <div id="submitSection" class="section hidden">
-      <h2>Submit Trace</h2>
-
-      <div class="form-group">
-        <label for="txHash">Transaction Hash (optional)</label>
-        <input type="text" id="txHash" placeholder="0x123...">
-      </div>
-
-      <div class="form-group">
-        <label for="chainId">Chain ID (optional)</label>
-        <input type="text" id="chainId" placeholder="1" value="1">
-      </div>
-
-      <div class="button-group">
-        <button id="submitBtn" class="btn-success">Submit Trace</button>
-        <button id="resetBtn" class="btn-danger">Reset & Start Over</button>
-      </div>
-    </div>
-
-    <!-- Activity Log -->
-    <div class="section">
-      <h2>Activity Log</h2>
+    <!-- Activity Log Card -->
+    <div class="card">
+      <h2><span class="icon">&#128220;</span> Activity Log</h2>
       <div id="log" class="log">
         <div class="log-entry">
-          <span class="log-time">[00:00:00]</span>
-          <span class="log-info">Ready to create a trace...</span>
+          <span class="log-time">[--:--:--]</span>
+          <span class="log-info">Waiting for wallet connection...</span>
         </div>
       </div>
     </div>
 
-    <div id="status" class="status"></div>
+    <!-- Proxy Status -->
+    <div class="card" style="padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 13px; color: #8892b0;">Mirador Gateway Status</span>
+        <span id="proxyStatus" style="font-size: 12px;">Checking...</span>
+      </div>
+    </div>
   </div>
+
+  <div id="statusBar" class="status-bar"></div>
 
   <script type="module" src="./bundle.js"></script>
 </body>
