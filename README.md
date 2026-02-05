@@ -10,7 +10,6 @@ npm install @miradorlabs/web
 
 ## Features
 
-- **Auto-Flush Mode** - Data automatically batches and sends after a configurable period of inactivity
 - **Keep-Alive** - Automatic periodic pings to maintain trace liveness (configurable interval)
 - **Trace Lifecycle** - Explicit close trace method with automatic cleanup
 - **Fluent Builder Pattern** - Method chaining for building traces
@@ -20,7 +19,7 @@ npm install @miradorlabs/web
 - **TypeScript Support** - Full type definitions included
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
 
-## Quick Start (Auto-Flush - Default)
+## Quick Start (Default)
 
 ```typescript
 import { Client } from '@miradorlabs/web';
