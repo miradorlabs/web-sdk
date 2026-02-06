@@ -30,7 +30,7 @@
 - [ ] I have updated documentation if needed
 - [ ] My changes don't introduce new warnings or errors
 
-## Browser Testing
+## Browser Testing (optional)
 
 <!-- Mark browsers tested with an "x" -->
 
@@ -44,9 +44,8 @@
 <!-- Describe how you tested your changes -->
 
 ### Steps to Test
-1.
-2.
-3.
+
+<!-- Add your steps to test here -->
 
 ## Screenshots (if applicable)
 
