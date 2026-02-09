@@ -1,7 +1,7 @@
 // ============================================================================
 // Transaction Functions
 // ============================================================================
-import { ChainName } from '@miradorlabs/web'
+import { ChainName } from '@miradorlabs/web-sdk'
 import { elements, walletState, traceState, miradorClient } from './state.js';
 import { log, showStatus, formatAddress, getNetworkInfo } from './utils.js';
 import { updateBalance } from './wallet.js';

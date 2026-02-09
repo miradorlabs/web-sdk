@@ -5,7 +5,7 @@ Web browser SDK for the Mirador tracing platform. This package provides a browse
 ## Installation
 
 ```bash
-npm install @miradorlabs/web
+npm install @miradorlabs/web-sdk
 ```
 
 ## Features
@@ -22,7 +22,7 @@ npm install @miradorlabs/web
 ## Quick Start (Default)
 
 ```typescript
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 
 const client = new Client('your-api-key');
 
@@ -44,7 +44,7 @@ trace.flush();  // → UpdateTrace sent immediately
 ## Manual Flush Mode
 
 ```typescript
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 
 const client = new Client('your-api-key');
 
@@ -66,7 +66,7 @@ trace.flush();  // → UpdateTrace
 Set `flushPeriodMs: 0` to flush immediately on every SDK call (no batching):
 
 ```typescript
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 
 const client = new Client('your-api-key');
 
@@ -281,7 +281,7 @@ trace.addStackTrace('checkpoint', { stage: 'validation' })
 Add a previously captured stack trace as an event. Useful when you need to capture a stack trace at one point but record it later.
 
 ```typescript
-import { captureStackTrace } from '@miradorlabs/web';
+import { captureStackTrace } from '@miradorlabs/web-sdk';
 
 // Capture stack trace now
 const stack = captureStackTrace();
@@ -363,7 +363,7 @@ const closed = trace.isClosed();  // boolean
 ## Complete Example: Transaction Tracking
 
 ```typescript
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 
 // Create client with custom keep-alive interval (optional)
 const client = new Client('your-api-key', {
@@ -442,7 +442,7 @@ import {
   captureStackTrace,
   formatStackTrace,
   formatStackTraceReadable
-} from '@miradorlabs/web';
+} from '@miradorlabs/web-sdk';
 
 // Capture current stack trace
 const stack = captureStackTrace();
@@ -473,7 +473,7 @@ import {
   StackFrame,        // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,        // { frames: StackFrame[], raw: string }
   ChainName,         // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
-} from '@miradorlabs/web';
+} from '@miradorlabs/web-sdk';
 ```
 
 ## Browser Compatibility

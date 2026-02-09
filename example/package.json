@@ -30,7 +30,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@miradorlabs/web": "file:..",
+    "@miradorlabs/web-sdk": "file:..",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
     "ethers": "^6.13.0",
