@@ -1,5 +1,5 @@
 {
-  "name": "@miradorlabs/web",
+  "name": "@miradorlabs/web-sdk",
   "version": "1.0.0",
   "type": "module",
   "description": "Mirador Client Side Web SDK ",
