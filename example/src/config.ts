@@ -1,4 +1,4 @@
-import { ChainName } from '@miradorlabs/web'
+import { ChainName } from '@miradorlabs/web-sdk'
 // ============================================================================
 // Configuration
 // ============================================================================

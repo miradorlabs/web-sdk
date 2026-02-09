@@ -2,7 +2,7 @@
 // API Key Functions
 // ============================================================================
 
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 import { GATEWAY_URL } from './config.js';
 import { elements, setMiradorClient, setApiKey } from './state.js';
 import { log, showStatus } from './utils.js';

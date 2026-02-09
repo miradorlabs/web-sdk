@@ -2,7 +2,7 @@
 // Type Definitions
 // ============================================================================
 
-import type { Client, Trace } from '@miradorlabs/web';
+import type { Client, Trace } from '@miradorlabs/web-sdk';
 
 // EIP-6963 Provider Info
 export interface EIP6963ProviderInfo {

@@ -16,7 +16,7 @@ export default {
   plugins: [
     alias({
       entries: [
-        { find: '@miradorlabs/web', replacement: path.resolve(__dirname, '../dist/index.esm.js') }
+        { find: '@miradorlabs/web-sdk', replacement: path.resolve(__dirname, '../dist/index.esm.js') }
       ]
     }),
     resolve({
