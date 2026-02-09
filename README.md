@@ -61,22 +61,6 @@ trace.addEvent('transaction_signed')
 trace.flush();  // → UpdateTrace
 ```
 
-## Immediate Flush Mode
-
-Set `flushPeriodMs: 0` to flush immediately on every SDK call (no batching):
-
-```typescript
-import { Client } from '@miradorlabs/web-sdk';
-
-const client = new Client('your-api-key');
-
-const trace = client.trace({ name: 'SwapExecution', flushPeriodMs: 0 })
-  .addAttribute('from', '0xabc...');  // → CreateTrace sent immediately
-
-trace.addEvent('transaction_signed'); // → UpdateTrace sent immediately
-trace.addTxHint('0x...', 'ethereum'); // → UpdateTrace sent immediately
-```
-
 ## Keep-Alive & Trace Lifecycle
 
 ### Automatic Keep-Alive
@@ -186,7 +170,6 @@ Creates a new trace builder.
 ```typescript
 const trace = client.trace({ name: 'MyTrace' });
 const trace = client.trace({ name: 'MyTrace', });
-const trace = client.trace({ flushPeriodMs: 100 });
 
 // Stack trace capture is enabled by default - to disable:
 const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
@@ -195,7 +178,6 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | `string` | `undefined` | Optional name of the trace |
-| `flushPeriodMs` | `number` | `50` | Debounce period in ms (0 = immediate flush on every call) |
 | `includeUserMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
