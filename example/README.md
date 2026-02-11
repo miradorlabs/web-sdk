@@ -230,13 +230,13 @@ When you send a transaction, the following data is automatically captured:
 ### SDK Usage Pattern
 
 ```javascript
-import { Client } from '@miradorlabs/web';
+import { Client } from '@miradorlabs/web-sdk';
 
 // 1. Initialize the client
-const client = new Client('your-api-key', 'https://ingest-gateway.mirador.org');
+const client = new Client('your-api-key', { apiUrl: 'https://ingest-gateway.mirador.org' });
 
-// 2. Create a trace (second param enables user metadata collection)
-const trace = client.trace('web3_transfer', true);
+// 2. Create a trace
+const trace = client.trace({ name: 'web3_transfer' });
 
 // 3. Add attributes
 trace
