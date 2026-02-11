@@ -11,10 +11,9 @@ const app = express();
 const PORT = 3001;
 
 // Target Mirador Gateway
-// Dev
 const GATEWAY_URL_STAGING = 'https://ingest-gateway-dev.mirador.org:443';
-// Default PROD
-const GATEWAY_URL_PROD = 'https://ingest.mirador.org:443'
+const GATEWAY_URL_PROD = 'https://ingest.mirador.org:443';
+const GATEWAY_URL = process.env.MIRADOR_GATEWAY === 'staging' ? GATEWAY_URL_STAGING : GATEWAY_URL_PROD;
 // Enable CORS for all origins (development only)
 app.use(cors({
   origin: '*',

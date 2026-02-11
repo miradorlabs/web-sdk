@@ -156,7 +156,7 @@ new Client(apiKey: string, options?: ClientOptions)
 
 ```typescript
 interface ClientOptions {
-  apiUrl?: string;              // Gateway URL (defaults to ingest-gateway-dev.mirador.org:443)
+  apiUrl?: string;              // Gateway URL (defaults to ingest.mirador.org:443)
   keepAliveIntervalMs?: number; // Keep-alive ping interval in milliseconds (default: 10000)
 }
 ```

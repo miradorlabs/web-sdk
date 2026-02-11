@@ -233,7 +233,7 @@ When you send a transaction, the following data is automatically captured:
 import { Client } from '@miradorlabs/web-sdk';
 
 // 1. Initialize the client
-const client = new Client('your-api-key', { apiUrl: 'https://ingest-gateway.mirador.org' });
+const client = new Client('your-api-key', { apiUrl: 'https://ingest.mirador.org' });
 
 // 2. Create a trace
 const trace = client.trace({ name: 'web3_transfer' });

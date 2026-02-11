@@ -4,7 +4,7 @@
   "description": "Interactive demo for Mirador Web SDK",
   "type": "module",
   "scripts": {
-    "build-sdk": "cd .. && npm run build",
+    "build-sdk": "cd .. && npm install && npm run build",
     "build": "npm run build-sdk && rollup -c",
     "proxy": "node proxy-server.js",
     "start": "npm run build && python3 -m http.server 8000",

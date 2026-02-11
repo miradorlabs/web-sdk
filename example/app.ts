@@ -4,6 +4,7 @@
 
 // Import modules
 import { elements } from './src/state.js';
+import { GATEWAY_URL } from './src/config.js';
 import { log } from './src/utils.js';
 import { saveApiKey, changeApiKey, toggleApiKeyVisibility, loadSavedApiKey } from './src/api-key.js';
 import { connectWallet, disconnectWallet, initWalletDiscovery, copyAddress } from './src/wallet.js';
@@ -62,6 +63,22 @@ elements.tagInput?.addEventListener('keypress', (e: KeyboardEvent) => {
 
 log('Mirador Web3 Demo loaded', 'success');
 log('Enter your API key to get started', 'info');
+
+// Check gateway proxy status
+fetch(`${GATEWAY_URL}/health`)
+  .then((res) => res.json())
+  .then(() => {
+    if (elements.proxyStatus) {
+      elements.proxyStatus.textContent = 'Connected';
+      elements.proxyStatus.style.color = '#64ffda';
+    }
+  })
+  .catch(() => {
+    if (elements.proxyStatus) {
+      elements.proxyStatus.textContent = 'Unavailable';
+      elements.proxyStatus.style.color = '#ff5555';
+    }
+  });
 
 // Initialize wallet discovery (EIP-6963)
 initWalletDiscovery();
