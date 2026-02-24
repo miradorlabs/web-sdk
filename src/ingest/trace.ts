@@ -364,6 +364,16 @@ export class Trace {
   }
 
   /**
+   * Add transaction input data (calldata) as a trace event.
+   * Useful for debugging failed transactions where input data is still available.
+   * @param inputData The hex-encoded transaction input data (e.g., "0xa9059cbb...")
+   * @returns This trace builder for chaining
+   */
+  addTxInputData(inputData: string): this {
+    return this.addEvent('Tx input data', inputData);
+  }
+
+  /**
    * Flush pending data to the gateway.
    * Fire-and-forget - returns immediately but maintains strict ordering of requests.
    * First flush calls CreateTrace, subsequent flushes call UpdateTrace.

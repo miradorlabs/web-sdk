@@ -259,6 +259,54 @@ describe('Trace', () => {
     });
   });
 
+  describe('addTxInputData', () => {
+    it('should return this for chaining', () => {
+      const trace = client.trace({ name: 'TestTrace' });
+      expect(trace.addTxInputData('0x1234')).toBe(trace);
+    });
+
+    it('should add an event with the correct name and input data', async () => {
+      const inputData = '0xa9059cbb0000000000000000000000001234567890abcdef';
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addTxInputData(inputData);
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const events = request.getData()!.getEventsList();
+      // Events: trace init + tx input data
+      expect(events.length).toBe(2);
+      expect(events[0].getName()).toBe('trace init');
+      expect(events[1].getName()).toBe('Tx input data');
+      expect(events[1].getDetails()).toBe(inputData);
+    });
+
+    it('should work alongside other builder methods', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addAttribute('wallet', '0xabc')
+        .addTxHint('0x123', 'ethereum')
+        .addTxInputData('0xa9059cbb00000000')
+        .addTag('bridge');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const data = request.getData();
+      const attrsMap = data!.getAttributesList()[0].getAttributesMap();
+      expect(attrsMap.get('wallet')).toBe('0xabc');
+      expect(data!.getTxHashHintsList().length).toBe(1);
+      expect(data!.getTagsList()[0].getTagsList()).toContain('bridge');
+
+      // Events: trace init + tx input data
+      const events = data!.getEventsList();
+      const txInputEvent = events.find(e => e.getName() === 'Tx input data');
+      expect(txInputEvent).toBeDefined();
+      expect(txInputEvent!.getDetails()).toBe('0xa9059cbb00000000');
+    });
+  });
+
   describe('stack trace features', () => {
     it('addStackTrace() should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
