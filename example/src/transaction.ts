@@ -2,6 +2,7 @@
 // Transaction Functions
 // ============================================================================
 import { ChainName } from '@miradorlabs/web-sdk'
+import { BrowserProvider, parseEther } from 'ethers';
 import { elements, walletState, traceState, miradorClient } from './state.js';
 import { log, showStatus, formatAddress, getNetworkInfo } from './utils.js';
 import { updateBalance } from './wallet.js';
@@ -18,13 +19,6 @@ declare global {
 interface ProviderRpcError extends Error {
   code: number;
   data?: unknown;
-}
-
-// Transaction receipt type
-interface TransactionReceipt {
-  status: string;
-  blockNumber: string;
-  transactionHash: string;
 }
 
 // ============================================================================
@@ -107,17 +101,16 @@ export async function sendTransaction(): Promise<void> {
     traceState.currentTrace = trace;
     log('Trace created, sending transaction...', 'info');
 
-    // Send the transaction
+    // Send the transaction using ethers.js
     showStatus('Please confirm the transaction in your wallet...', 'pending', 0);
 
-    const txHash = await walletState.provider.request({
-      method: 'eth_sendTransaction',
-      params: [{
-        from: walletState.address,
-        to: recipient,
-        value: '0x' + amountWei.toString(16),
-      }],
-    }) as string;
+    const ethersProvider = new BrowserProvider(walletState.provider);
+    const signer = await ethersProvider.getSigner();
+    const tx = await signer.sendTransaction({
+      to: recipient,
+      value: parseEther(amount),
+    });
+    const txHash = tx.hash;
 
     log(`Transaction sent: ${txHash}`, 'success');
     showStatus('Transaction sent! Waiting for confirmation...', 'pending', 0);
@@ -134,9 +127,10 @@ export async function sendTransaction(): Promise<void> {
       elements.traceStatus.innerHTML = '<span class="spinner"></span> Pending';
     }
 
-    // Add transaction hash hint for blockchain correlation
+    // Add transaction hash hint and input data for blockchain correlation
     const chainName: ChainName = networkInfo.chain || 'ethereum';
     trace.addTxHint(txHash, chainName, 'ETH Transfer');
+    trace.addTxInputData(tx.data);
 
     // Flush and wait for trace ID
     trace.flush();
@@ -159,7 +153,7 @@ export async function sendTransaction(): Promise<void> {
     }
 
     // Wait for transaction confirmation
-    waitForConfirmation(txHash, traceId || undefined);
+    waitForConfirmation(tx, traceId || undefined);
 
   } catch (error) {
     const err = error as ProviderRpcError;
@@ -194,95 +188,74 @@ export async function sendTransaction(): Promise<void> {
 // Wait for Confirmation
 // ============================================================================
 
-async function waitForConfirmation(txHash: string, _traceId?: string): Promise<void> {
-  const maxAttempts = 60;
-  let attempts = 0;
+async function waitForConfirmation(tx: { hash: string; wait: () => Promise<{ status: number | null; blockNumber: number; hash: string } | null> }, _traceId?: string): Promise<void> {
+  const txHash = tx.hash;
 
-  const checkReceipt = async (): Promise<void> => {
-    if (!walletState.provider) return;
+  try {
+    const receipt = await tx.wait();
+    const success = receipt !== null && receipt.status === 1;
+    const blockNumber = receipt?.blockNumber;
 
-    try {
-      const receipt = await walletState.provider.request({
-        method: 'eth_getTransactionReceipt',
-        params: [txHash],
-      }) as TransactionReceipt | null;
-
-      if (receipt) {
-        const success = receipt.status === '0x1';
-        const blockNumber = parseInt(receipt.blockNumber, 16);
-
-        if (elements.traceStatus) {
-          if (success) {
-            elements.traceStatus.innerHTML = '&#10003; Confirmed';
-            elements.traceStatus.style.background = 'rgba(16, 185, 129, 0.2)';
-            log(`Transaction confirmed in block ${blockNumber}`, 'success');
-            showStatus('Transaction confirmed!', 'success');
-          } else {
-            elements.traceStatus.innerHTML = '&#10007; Failed';
-            elements.traceStatus.style.background = 'rgba(239, 68, 68, 0.2)';
-            elements.traceStatus.style.color = '#f87171';
-            log('Transaction failed on-chain', 'error');
-            showStatus('Transaction failed', 'error');
-          }
-        }
-
-        // Close the trace with confirmation details
-        if (traceState.currentTrace) {
-          const closeReason = success
-            ? `Transaction confirmed in block ${blockNumber}`
-            : 'Transaction failed on-chain';
-          traceState.currentTrace.addEvent('transaction_confirmed', {
-            success,
-            blockNumber,
-            txHash,
-          });
-          await traceState.currentTrace.close(closeReason);
-          log('Trace closed', 'info');
-          traceState.currentTrace = null;
-        }
-
-        // Reset button
-        if (elements.sendTxBtn) {
-          elements.sendTxBtn.disabled = false;
-          elements.sendTxBtn.innerHTML = '<span>&#9889;</span> Send Transaction';
-        }
-
-        // Update balance
-        await updateBalance();
-        return;
-      }
-
-      attempts++;
-      if (attempts < maxAttempts) {
-        setTimeout(checkReceipt, 2000);
+    if (elements.traceStatus) {
+      if (success) {
+        elements.traceStatus.innerHTML = '&#10003; Confirmed';
+        elements.traceStatus.style.background = 'rgba(16, 185, 129, 0.2)';
+        log(`Transaction confirmed in block ${blockNumber}`, 'success');
+        showStatus('Transaction confirmed!', 'success');
       } else {
-        log('Transaction confirmation timeout', 'warn');
-        if (elements.traceStatus) {
-          elements.traceStatus.innerHTML = '? Unknown';
-        }
-        if (elements.sendTxBtn) {
-          elements.sendTxBtn.disabled = false;
-          elements.sendTxBtn.innerHTML = '<span>&#9889;</span> Send Transaction';
-        }
-
-        // Close trace on timeout
-        if (traceState.currentTrace) {
-          traceState.currentTrace.addEvent('confirmation_timeout', { txHash, attempts: maxAttempts });
-          await traceState.currentTrace.close('Confirmation timeout');
-          traceState.currentTrace = null;
-        }
-      }
-    } catch (error) {
-      const err = error as Error;
-      log(`Error checking receipt: ${err.message}`, 'error');
-      attempts++;
-      if (attempts < maxAttempts) {
-        setTimeout(checkReceipt, 2000);
+        elements.traceStatus.innerHTML = '&#10007; Failed';
+        elements.traceStatus.style.background = 'rgba(239, 68, 68, 0.2)';
+        elements.traceStatus.style.color = '#f87171';
+        log('Transaction failed on-chain', 'error');
+        showStatus('Transaction failed', 'error');
       }
     }
-  };
 
-  setTimeout(checkReceipt, 2000);
+    // Close the trace with confirmation details
+    if (traceState.currentTrace) {
+      const closeReason = success
+        ? `Transaction confirmed in block ${blockNumber}`
+        : 'Transaction failed on-chain';
+      traceState.currentTrace.addEvent('transaction_confirmed', {
+        success,
+        blockNumber,
+        txHash,
+      });
+      await traceState.currentTrace.close(closeReason);
+      log('Trace closed', 'info');
+      traceState.currentTrace = null;
+    }
+
+    // Reset button
+    if (elements.sendTxBtn) {
+      elements.sendTxBtn.disabled = false;
+      elements.sendTxBtn.innerHTML = '<span>&#9889;</span> Send Transaction';
+    }
+
+    // Update balance
+    await updateBalance();
+  } catch (error) {
+    const err = error as Error;
+    log(`Transaction confirmation error: ${err.message}`, 'error');
+
+    if (elements.traceStatus) {
+      elements.traceStatus.innerHTML = '&#10007; Failed';
+      elements.traceStatus.style.background = 'rgba(239, 68, 68, 0.2)';
+      elements.traceStatus.style.color = '#f87171';
+    }
+    showStatus(`Transaction failed: ${err.message}`, 'error');
+
+    if (traceState.currentTrace) {
+      traceState.currentTrace.addEvent('confirmation_error', { txHash, error: err.message });
+      await traceState.currentTrace.close(`Confirmation error: ${err.message}`);
+      traceState.currentTrace = null;
+    }
+
+    if (elements.sendTxBtn) {
+      elements.sendTxBtn.disabled = false;
+      elements.sendTxBtn.innerHTML = '<span>&#9889;</span> Send Transaction';
+    }
+  }
 }
 
 // ============================================================================

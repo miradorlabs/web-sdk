@@ -28,6 +28,7 @@ export class Client {
   public apiKey: string;
   public keepAliveIntervalMs: number;
   private client: IngestGatewayServiceClient;
+  private provider?: import('./types').EIP1193Provider;
 
   /**
    * Create a new Client instance
@@ -38,6 +39,7 @@ export class Client {
     this.apiKey = apiKey;
     this.apiUrl = options?.apiUrl || DEFAULT_API_URL;
     this.keepAliveIntervalMs = options?.keepAliveIntervalMs || DEFAULT_KEEP_ALIVE_INTERVAL_MS;
+    this.provider = options?.provider;
 
     const credentials = { 'x-ingest-api-key': apiKey };
     this.client = new IngestGatewayServiceClient(this.apiUrl, credentials);
@@ -87,6 +89,7 @@ export class Client {
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
+      provider: options?.provider ?? this.provider,
     });
   }
 }
