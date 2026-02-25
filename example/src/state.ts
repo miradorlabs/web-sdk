@@ -110,6 +110,7 @@ export const elements: DOMElements = {
   transactionCard: document.getElementById('transactionCard'),
   recipientAddress: document.getElementById('recipientAddress') as HTMLInputElement | null,
   sendAmount: document.getElementById('sendAmount') as HTMLInputElement | null,
+  tokenAddress: document.getElementById('tokenAddress') as HTMLInputElement | null,
   traceName: document.getElementById('traceName') as HTMLInputElement | null,
   sendTxBtn: document.getElementById('sendTxBtn') as HTMLButtonElement | null,
 

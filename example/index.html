@@ -763,21 +763,34 @@
     <!-- Send Transaction Card -->
     <div id="transactionCard" class="card hidden">
       <h2><span class="icon">&#128640;</span> Step 3: Send Transaction</h2>
+      <p style="color: #8892b0; margin-bottom: 16px; font-size: 13px; line-height: 1.5;">
+        Send a native ETH transfer or an ERC-20 token transfer. For token transfers, provide a token contract address below &mdash; the recipient and amount will be encoded as <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 12px;">transfer(to, amount)</code> calldata, which is captured by <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 12px;">addTxInputData()</code> in the Mirador trace.
+      </p>
+      <div style="background: rgba(102, 126, 234, 0.1); border: 1px solid rgba(102, 126, 234, 0.2); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 12px; line-height: 1.6; color: #8892b0;">
+        <strong style="color: #667eea;">Testing tip:</strong> Switch your wallet to the <strong style="color: #e4e4e4;">Sepolia</strong> testnet. Get free testnet ETH from <a href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia" target="_blank" style="color: #667eea;">Google Cloud Faucet</a>. To test ERC-20 transfers with calldata, first wrap some ETH by sending a native transfer to the WETH contract, then use it as the token address:
+        <code style="display: block; margin-top: 6px; background: rgba(0,0,0,0.2); padding: 6px 10px; border-radius: 6px; color: #e4e4e4; word-break: break-all;">0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14</code>
+      </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label for="recipientAddress">Recipient Address</label>
+          <label for="recipientAddress">Recipient Address <span style="color: #4a5568;">(who receives ETH or tokens)</span></label>
           <input type="text" id="recipientAddress" placeholder="0x...">
         </div>
         <div class="form-group">
-          <label for="sendAmount">Amount (ETH)</label>
+          <label for="sendAmount">Amount (ETH / Tokens)</label>
           <input type="text" id="sendAmount" placeholder="0.01" value="0.001">
         </div>
       </div>
 
-      <div class="form-group">
-        <label for="traceName">Trace Name</label>
-        <input type="text" id="traceName" placeholder="e.g., payment_to_friend" value="web3_transfer">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tokenAddress">Token Contract Address <span style="color: #4a5568;">(optional &mdash; leave empty for native ETH transfer)</span></label>
+          <input type="text" id="tokenAddress" placeholder="0x... (e.g., Sepolia WETH: 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14)">
+        </div>
+        <div class="form-group">
+          <label for="traceName">Trace Name</label>
+          <input type="text" id="traceName" placeholder="e.g., payment_to_friend" value="web3_transfer">
+        </div>
       </div>
 
       <!-- Transaction Preview -->

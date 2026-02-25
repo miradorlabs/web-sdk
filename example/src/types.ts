@@ -80,6 +80,7 @@ export interface DOMElements {
   transactionCard: HTMLElement | null;
   recipientAddress: HTMLInputElement | null;
   sendAmount: HTMLInputElement | null;
+  tokenAddress: HTMLInputElement | null;
   traceName: HTMLInputElement | null;
   sendTxBtn: HTMLButtonElement | null;
 
