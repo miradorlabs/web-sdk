@@ -293,6 +293,20 @@ trace.addTxHint('0x123...', 'ethereum', 'Main transaction')
 | `chain` | `ChainName` | Chain name: 'ethereum' \| 'polygon' \| 'arbitrum' \| 'base' \| 'optimism' \| 'bsc' |
 | `details` | `string` | Optional details about the transaction |
 
+#### `addTxInputData(inputData)`
+
+Add transaction input data (calldata) as a trace event. This is the hex-encoded data field from a transaction, useful for debugging failed transactions where the calldata is still available even though the transaction reverted.
+
+```typescript
+trace.addTxInputData('0xa9059cbb000000000000000000000000...')
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `inputData` | `string` | Hex-encoded transaction input data (calldata) |
+
+Returns: `this` for chaining
+
 #### `flush()`
 
 Flush pending data to the gateway. Fire-and-forget - returns immediately but maintains strict ordering.
@@ -376,6 +390,46 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
   } catch (error) {
     trace.addEvent('transaction_failed', { error: error.message });
     await trace.close('Transaction failed');
+  }
+}
+```
+
+## Tracing Transaction Input Data with ethers.js
+
+When a transaction fails on-chain, the input data (calldata) is still available and contains the encoded function call and parameters. Recording it with `addTxInputData()` lets you decode and debug the failure later in the Mirador dashboard.
+
+```typescript
+import { Client } from '@miradorlabs/web-sdk';
+import { BrowserProvider, parseEther } from 'ethers';
+
+const client = new Client('your-api-key');
+
+async function sendTracedTransaction() {
+  const provider = new BrowserProvider(window.ethereum);
+  const signer = await provider.getSigner();
+
+  const trace = client.trace({ name: 'TokenTransfer' })
+    .addAttribute('from', signer.address)
+    .addTags(['transfer', 'ethereum']);
+
+  try {
+    const tx = await signer.sendTransaction({
+      to: '0xRecipientAddress...',
+      value: parseEther('0.1'),
+      data: '0xa9059cbb000000000000000000000000...', // encoded ERC-20 transfer
+    });
+
+    trace.addEvent('transaction_sent', { txHash: tx.hash })
+         .addTxHint(tx.hash, 'ethereum')
+         .addTxInputData(tx.data);  // record the calldata for debugging
+
+    const receipt = await tx.wait();
+    trace.addEvent('transaction_confirmed', { blockNumber: receipt.blockNumber });
+    await trace.close('Transfer completed');
+  } catch (error) {
+    // Even on failure, tx.data may be available from the error or the sent tx
+    trace.addEvent('transaction_failed', { error: error.message });
+    await trace.close('Transfer failed');
   }
 }
 ```

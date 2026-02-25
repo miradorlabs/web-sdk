@@ -2,7 +2,7 @@
 // Transaction Functions
 // ============================================================================
 import { ChainName } from '@miradorlabs/web-sdk'
-import { BrowserProvider, parseEther } from 'ethers';
+import { BrowserProvider, Interface, parseEther, parseUnits } from 'ethers';
 import { elements, walletState, traceState, miradorClient } from './state.js';
 import { log, showStatus, formatAddress, getNetworkInfo } from './utils.js';
 import { updateBalance } from './wallet.js';
@@ -30,6 +30,7 @@ export async function sendTransaction(): Promise<void> {
 
   const recipient = elements.recipientAddress.value.trim();
   const amount = elements.sendAmount.value.trim();
+  const tokenAddress = elements.tokenAddress?.value.trim() || '';
   const traceName = elements.traceName.value.trim() || 'web3_transfer';
 
   // Validation
@@ -48,9 +49,15 @@ export async function sendTransaction(): Promise<void> {
     return;
   }
 
+  if (tokenAddress && !tokenAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    showStatus('Invalid token contract address', 'error');
+    return;
+  }
+
+  const isTokenTransfer = !!tokenAddress;
   const amountWei = BigInt(Math.floor(parseFloat(amount) * 1e18));
 
-  if (walletState.balance && amountWei > walletState.balance) {
+  if (!isTokenTransfer && walletState.balance && amountWei > walletState.balance) {
     showStatus('Insufficient balance', 'error');
     return;
   }
@@ -77,10 +84,14 @@ export async function sendTransaction(): Promise<void> {
       .addAttribute('wallet.type', 'injected')
       .addAttribute('network.name', networkInfo.name)
       .addAttribute('network.chainId', (walletState.chainId || 0).toString())
-      .addAttribute('transaction.type', 'transfer')
+      .addAttribute('transaction.type', isTokenTransfer ? 'erc20_transfer' : 'native_transfer')
       .addAttribute('transaction.to', recipient)
       .addAttribute('transaction.value', amount)
       .addAttribute('transaction.valueWei', amountWei.toString());
+
+    if (isTokenTransfer) {
+      trace.addAttribute('transaction.tokenContract', tokenAddress);
+    }
 
     // Add custom attributes
     for (const [key, value] of Object.entries(traceState.attributes)) {
@@ -106,13 +117,33 @@ export async function sendTransaction(): Promise<void> {
 
     const ethersProvider = new BrowserProvider(walletState.provider);
     const signer = await ethersProvider.getSigner();
-    const tx = await signer.sendTransaction({
-      to: recipient,
-      value: parseEther(amount),
-    });
-    const txHash = tx.hash;
 
+    let tx;
+    if (isTokenTransfer) {
+      // ERC-20 transfer: encode transfer(address,uint256) calldata
+      const erc20 = new Interface(['function transfer(address to, uint256 amount)']);
+      const data = erc20.encodeFunctionData('transfer', [recipient, parseUnits(amount, 18)]);
+      log(`Encoded ERC-20 transfer calldata: ${data.slice(0, 20)}...`, 'info');
+
+      tx = await signer.sendTransaction({
+        to: tokenAddress,  // send to the token contract
+        data,              // encoded transfer(recipient, amount)
+        value: 0n,         // no ETH value for token transfers
+      });
+    } else {
+      // Native ETH transfer
+      tx = await signer.sendTransaction({
+        to: recipient,
+        value: parseEther(amount),
+      });
+    }
+
+    const txHash = tx.hash;
+    log(`Transaction submitted: ${tx.data}`, 'info');
     log(`Transaction sent: ${txHash}`, 'success');
+    if (tx.data && tx.data !== '0x') {
+      log(`Tx input data: ${tx.data}`, 'info');
+    }
     showStatus('Transaction sent! Waiting for confirmation...', 'pending', 0);
 
     // Add event: transaction sent
@@ -129,7 +160,7 @@ export async function sendTransaction(): Promise<void> {
 
     // Add transaction hash hint and input data for blockchain correlation
     const chainName: ChainName = networkInfo.chain || 'ethereum';
-    trace.addTxHint(txHash, chainName, 'ETH Transfer');
+    trace.addTxHint(txHash, chainName, isTokenTransfer ? 'ERC-20 Transfer' : 'ETH Transfer');
     trace.addTxInputData(tx.data);
 
     // Flush and wait for trace ID
