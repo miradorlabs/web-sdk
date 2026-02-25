@@ -531,9 +531,10 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
-      const details = JSON.parse(hints[0].getDetails());
-      expect(details.input).toBe('0xa9059cbb...');
+      const events = request.getData()!.getEventsList();
+      const inputEvent = events.find(e => e.getName() === 'Tx input data');
+      expect(inputEvent).toBeDefined();
+      expect(inputEvent!.getDetails()).toBe('0xa9059cbb...');
     });
 
     it('should accept TxHintOptions with input and details', async () => {
@@ -544,10 +545,12 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const events = request.getData()!.getEventsList();
+      const inputEvent = events.find(e => e.getName() === 'Tx input data');
+      expect(inputEvent).toBeDefined();
+      expect(inputEvent!.getDetails()).toBe('0xa9059cbb...');
       const hints = request.getData()!.getTxHashHintsList();
-      const details = JSON.parse(hints[0].getDetails());
-      expect(details.input).toBe('0xa9059cbb...');
-      expect(details.details).toBe('swap');
+      expect(hints[0].getDetails()).toBe('swap');
     });
   });
 
@@ -573,9 +576,10 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
-      const details = JSON.parse(hints[0].getDetails());
-      expect(details.input).toBe('0xa9059cbb...');
+      const events = request.getData()!.getEventsList();
+      const inputEvent = events.find(e => e.getName() === 'Tx input data');
+      expect(inputEvent).toBeDefined();
+      expect(inputEvent!.getDetails()).toBe('0xa9059cbb...');
     });
 
     it('should extract input data from tx.input (ethers v6 / viem style)', async () => {
@@ -588,8 +592,10 @@ describe('Trace', () => {
       const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
-      const details = JSON.parse(hints[0].getDetails());
-      expect(details.input).toBe('0xdeadbeef');
+      const events = request.getData()!.getEventsList();
+      const inputEvent = events.find(e => e.getName() === 'Tx input data');
+      expect(inputEvent).toBeDefined();
+      expect(inputEvent!.getDetails()).toBe('0xdeadbeef');
     });
 
     it('should accept explicit chain parameter over chainId', async () => {
