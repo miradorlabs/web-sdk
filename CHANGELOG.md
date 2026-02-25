@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/miradorlabs/web-sdk/compare/v1.1.0...v1.2.0) (2026-02-25)
+
+
+### Features
+
+* add tx data capture, sendTransaction, and EIP-1193 provider ([9f86529](https://github.com/miradorlabs/web-sdk/commit/9f865293e0483eb288bd19e0bdd9c680709bc6a8))
+* guard addTxInputData for empty data, use ethers.js in example app ([ac08315](https://github.com/miradorlabs/web-sdk/commit/ac083158e5f41434e7bca30f505f56b299d3fb31))
+* tx metadata capture, sendTransaction, and EIP-1193 provider ([21a6614](https://github.com/miradorlabs/web-sdk/commit/21a66149a0f62537893afba8d17ce629d054b3b2))
+
+
+### Bug Fixes
+
+* emit tx input data as event consistently ([d014f49](https://github.com/miradorlabs/web-sdk/commit/d014f49bc7ba9dda9fc3cae2d5978f874e644158))
+
 ## [1.1.0](https://github.com/miradorlabs/web-sdk/compare/v1.0.0...v1.1.0) (2026-02-24)
 
 
