@@ -909,6 +909,182 @@ describe('Trace', () => {
     });
   });
 
+  describe('cross-SDK trace ID sharing', () => {
+    // Re-create mock with keepAlive/closeTrace so resumed-trace keep-alive and close tests work
+    beforeEach(() => {
+      (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+        createTrace: mockCreateTrace,
+        updateTrace: mockUpdateTrace,
+        keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+        closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      }));
+      client = new Client('test-api-key');
+    });
+
+    // Use fake timers to prevent keep-alive intervals from causing test timeouts
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    });
+
+    describe('setTraceId()', () => {
+      it('should return this for chaining', () => {
+        const trace = client.trace({ name: 'TestTrace' });
+        expect(trace.setTraceId('external-trace-123')).toBe(trace);
+      });
+
+      it('should set the trace ID', () => {
+        const trace = client.trace({ name: 'TestTrace' });
+        trace.setTraceId('external-trace-123');
+        expect(trace.getTraceId()).toBe('external-trace-123');
+      });
+
+      it('should cause first flush to send UpdateTrace instead of CreateTrace', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+        trace.setTraceId('external-trace-123');
+
+        trace.addAttribute('key', 'value');
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(mockCreateTrace).not.toHaveBeenCalled();
+        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+
+        const request = mockUpdateTrace.mock.calls[0][0];
+        expect(request.getTraceId()).toBe('external-trace-123');
+      });
+
+      it('should be ignored when trace is closed', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+          .addAttribute('key', 'value');
+
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        await trace.close('done');
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        trace.setTraceId('should-be-ignored');
+        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace is closed, ignoring setTraceId');
+        // Trace ID should remain as set by CreateTrace, not the new value
+        expect(trace.getTraceId()).toBe('trace-456');
+        warnSpy.mockRestore();
+      });
+
+      it('should be ignored when trace ID is already set via CreateTrace', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+          .addAttribute('key', 'value');
+
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(trace.getTraceId()).toBe('trace-456');
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        trace.setTraceId('should-be-ignored');
+        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
+        expect(trace.getTraceId()).toBe('trace-456');
+        warnSpy.mockRestore();
+      });
+
+      it('should be ignored when trace ID is already set via setTraceId', () => {
+        const trace = client.trace({ name: 'TestTrace' });
+        trace.setTraceId('first-id');
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        trace.setTraceId('second-id');
+        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
+        expect(trace.getTraceId()).toBe('first-id');
+        warnSpy.mockRestore();
+      });
+
+      it('should include pending data in the UpdateTrace request', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+        trace.setTraceId('external-trace-123');
+
+        trace
+          .addAttribute('wallet', '0xabc')
+          .addTag('resumed')
+          .addEvent('backend_handoff')
+          .addTxHint('0x123', 'ethereum');
+
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+        const request = mockUpdateTrace.mock.calls[0][0];
+        const data = request.getData();
+
+        const attrsMap = data.getAttributesList()[0].getAttributesMap();
+        expect(attrsMap.get('wallet')).toBe('0xabc');
+        expect(data.getTagsList()[0].getTagsList()).toContain('resumed');
+
+        const eventNames = data.getEventsList().map((e: { getName: () => string }) => e.getName());
+        expect(eventNames).toContain('trace init');
+        expect(eventNames).toContain('backend_handoff');
+
+        expect(data.getTxHashHintsList()[0].getTxHash()).toBe('0x123');
+      });
+
+      it('should start keep-alive after first successful UpdateTrace', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+        trace.setTraceId('external-trace-123');
+
+        trace.addAttribute('key', 'value');
+        trace.flush();
+
+        // Advance past the flush (0ms) then past the keep-alive interval (15s)
+        await jest.advanceTimersByTimeAsync(15000);
+
+        // The keep-alive mock should have been called
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).toHaveBeenCalled();
+      });
+    });
+
+    describe('traceId option in client.trace()', () => {
+      it('should pre-set the trace ID', () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'option-trace-id' });
+        expect(trace.getTraceId()).toBe('option-trace-id');
+      });
+
+      it('should cause first flush to send UpdateTrace', async () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'option-trace-id', includeUserMeta: false })
+          .addAttribute('key', 'value');
+
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(mockCreateTrace).not.toHaveBeenCalled();
+        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+      });
+
+      it('should prevent setTraceId from overriding', () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'option-trace-id' });
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        trace.setTraceId('override-attempt');
+        expect(trace.getTraceId()).toBe('option-trace-id');
+        warnSpy.mockRestore();
+      });
+
+      it('should work without traceId option (normal CreateTrace flow)', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+          .addAttribute('key', 'value');
+
+        expect(trace.getTraceId()).toBeNull();
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+        expect(mockUpdateTrace).not.toHaveBeenCalled();
+        expect(trace.getTraceId()).toBe('trace-456');
+      });
+    });
+  });
+
   describe('provider configuration', () => {
     let ethProvider: EIP1193Provider;
     let polygonProvider: EIP1193Provider;

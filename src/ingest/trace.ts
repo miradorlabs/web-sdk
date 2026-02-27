@@ -188,6 +188,7 @@ export class Trace {
 
     this.microtaskScheduled = true;
     scheduleMicrotask(() => {
+      if (!this.microtaskScheduled) return; // Cancelled by explicit flush()
       this.microtaskScheduled = false;
       this.flush();
     });
