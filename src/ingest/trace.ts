@@ -50,6 +50,7 @@ export interface TraceSubmitter {
 /** Options passed to MiradorTrace constructor (with defaults applied) */
 interface ResolvedTraceOptions {
   name?: string;
+  traceId?: string;
   includeUserMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
@@ -135,6 +136,7 @@ export class Trace {
   constructor(client: TraceSubmitter, options: ResolvedTraceOptions) {
     this.client = client;
     this.name = options.name;
+    this.traceId = options.traceId ?? null;
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
@@ -708,6 +710,9 @@ export class Trace {
       );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
+      } else {
+        // Start keep-alive if not already running (e.g., first update for a resumed trace)
+        this.startKeepAlive();
       }
     } catch (err) {
       console.error('[MiradorTrace] UpdateTrace error after retries:', err);
@@ -816,6 +821,26 @@ export class Trace {
    */
   getTraceId(): string | null {
     return this.traceId;
+  }
+
+  /**
+   * Set the trace ID on an existing trace instance, allowing it to resume
+   * a trace created elsewhere (e.g., passed from a backend SDK via HTTP header).
+   * Subsequent flushes will send UpdateTrace instead of CreateTrace.
+   * @param traceId The trace ID to resume
+   * @returns This trace builder for chaining
+   */
+  setTraceId(traceId: string): this {
+    if (this.closed) {
+      console.warn('[MiradorTrace] Trace is closed, ignoring setTraceId');
+      return this;
+    }
+    if (this.traceId !== null) {
+      console.warn('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
+      return this;
+    }
+    this.traceId = traceId;
+    return this;
   }
 
   /**
