@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/miradorlabs/web-sdk/compare/v1.2.0...v1.3.0) (2026-02-27)
+
+
+### Features
+
+* add cross-SDK trace ID sharing ([2b9ea14](https://github.com/miradorlabs/web-sdk/commit/2b9ea14d43e653af1d7cdc366d599b9a0bcbcf32))
+* add cross-SDK trace ID sharing ([17a0a79](https://github.com/miradorlabs/web-sdk/commit/17a0a7966225b10dba86705242abfe37c5e8512b))
+
 ## [1.2.0](https://github.com/miradorlabs/web-sdk/compare/v1.1.0...v1.2.0) (2026-02-25)
 
 
