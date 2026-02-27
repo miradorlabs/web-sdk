@@ -18,6 +18,7 @@ npm install @miradorlabs/web-sdk
 - **Stack Trace Capture** - Automatic or manual capture of call stack for debugging
 - **TypeScript Support** - Full type definitions included
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
+- **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
 
 ## Quick Start (Default)
 
@@ -178,6 +179,7 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | `string` | `undefined` | Optional name of the trace |
+| `traceId` | `string` | `undefined` | Resume an existing trace by ID (e.g., passed from backend SDK) |
 | `includeUserMeta` | `boolean` | `true` | Include browser/OS metadata |
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
@@ -328,6 +330,25 @@ Get the trace ID (available after first flush completes).
 const traceId = trace.getTraceId();  // string | null
 ```
 
+#### `setTraceId(traceId)`
+
+Set the trace ID on an existing trace instance, allowing it to resume a trace created elsewhere (e.g., passed from a backend SDK via HTTP header). Subsequent flushes will send `UpdateTrace` instead of `CreateTrace`.
+
+```typescript
+trace.setTraceId('abc-123-def');
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `traceId` | `string` | The trace ID to resume |
+
+Returns: `this` for chaining
+
+**Notes:**
+- Ignored if the trace is already closed (logs a warning)
+- Ignored if a trace ID is already set (logs a warning)
+- Can also be set at creation time via `client.trace({ traceId: '...' })`
+
 #### `close(reason?)`
 
 Close the trace and stop all timers (flush timer and keep-alive timer). After calling this method, all subsequent operations will be ignored.
@@ -434,6 +455,70 @@ async function sendTracedTransaction() {
 }
 ```
 
+## Cross-SDK Trace Sharing
+
+You can share a trace ID between the web SDK and the Node.js SDK to create a unified trace that spans both frontend and backend. This is useful when a user action in the browser triggers server-side processing that should be correlated under the same trace.
+
+### Frontend → Backend
+
+Pass the trace ID from the browser to your backend via an HTTP header:
+
+```typescript
+import { Client } from '@miradorlabs/web-sdk';
+
+const client = new Client('your-api-key');
+const trace = client.trace({ name: 'Checkout' })
+  .addAttribute('user', '0xabc...')
+  .addEvent('checkout_started');
+
+// Wait for the trace to be created so we have a trace ID
+// (or use a short delay / poll getTraceId())
+await new Promise(resolve => setTimeout(resolve, 100));
+
+const traceId = trace.getTraceId();
+
+// Pass trace ID to your backend
+const response = await fetch('/api/process-order', {
+  headers: { 'x-mirador-trace-id': traceId! },
+});
+```
+
+On the backend (Node.js SDK):
+
+```typescript
+import { Client } from '@miradorlabs/nodejs-sdk';
+
+const client = new Client('your-api-key');
+
+app.post('/api/process-order', async (req, res) => {
+  const traceId = req.headers['x-mirador-trace-id'];
+
+  const trace = client.trace({ name: 'ProcessOrder', traceId })
+    .addAttribute('step', 'backend')
+    .addEvent('order_processing');
+
+  await trace.create(); // Sends UpdateTrace (not CreateTrace)
+  // ...
+  await trace.close('Order processed');
+});
+```
+
+### Backend → Frontend
+
+Pass a trace ID from your backend to the browser and resume it:
+
+```typescript
+// Backend creates the trace and returns the ID
+const traceId = await getTraceIdFromBackend();
+
+// Option 1: Pass at creation time
+const trace = client.trace({ name: 'Dashboard', traceId });
+
+// Option 2: Set after creation
+const trace = client.trace({ name: 'Dashboard' });
+trace.setTraceId(traceId);
+```
+
 ## Automatic Client Metadata Collection
 
 When `includeUserMeta: true` is set (default), the SDK automatically collects:
@@ -504,7 +589,7 @@ import {
   Client,
   Trace,
   ClientOptions,
-  TraceOptions,      // { captureStackTrace?: boolean, ... }
+  TraceOptions,      // { name?, traceId?, includeUserMeta?, ... }
   AddEventOptions,   // { captureStackTrace?: boolean }
   StackFrame,        // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,        // { frames: StackFrame[], raw: string }

@@ -84,6 +84,7 @@ export class Client {
   trace(options?: TraceOptions): Trace {
     return new Trace(this, {
       name: options?.name,
+      traceId: options?.traceId,
       includeUserMeta: options?.includeUserMeta ?? DEFAULT_INCLUDE_USER_META,
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,

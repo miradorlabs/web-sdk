@@ -63,6 +63,8 @@ export interface ClientOptions {
 export interface TraceOptions {
   /** Trace name */
   name?: string;
+  /** Resume an existing trace by ID (e.g., passed from backend SDK via HTTP header) */
+  traceId?: string;
   /** Include browser/OS metadata in first flush (default: true) */
   includeUserMeta?: boolean;
   /** Maximum number of retry attempts on failure (default: 3) */
