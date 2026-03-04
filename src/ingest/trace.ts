@@ -11,6 +11,7 @@ import {
   Tags,
   Event,
   TxHashHint as TxHashHintProto,
+  SafeMsgHint as SafeMsgHintProto,
   Chain,
   KeepAliveRequest,
   KeepAliveResponse,
@@ -19,7 +20,7 @@ import {
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import type { TraceEvent, TxHashHint, ChainName, AddEventOptions, StackTrace, EIP1193Provider, TxHintOptions, TransactionLike, TransactionRequest } from './types';
+import type { TraceEvent, TxHashHint, SafeMsgHintData, ChainName, AddEventOptions, StackTrace, EIP1193Provider, TxHintOptions, TransactionLike, TransactionRequest } from './types';
 import { getClientMetadata } from './metadata';
 import { captureStackTrace } from './stacktrace';
 import { chainIdToName } from './chains';
@@ -123,6 +124,7 @@ export class Trace {
   private pendingTags: string[] = [];
   private pendingEvents: TraceEvent[] = [];
   private pendingTxHashHints: TxHashHint[] = [];
+  private pendingSafeMsgHints: SafeMsgHintData[] = [];
   private creationStackTrace: StackTrace | null = null;
   private creationTimestamp: Date = new Date();
 
@@ -413,6 +415,29 @@ export class Trace {
   }
 
   /**
+   * Add a Safe message hint for tracking Safe multisig message confirmations.
+   * @param msgHint The Safe message hash to track
+   * @param chain Chain name (e.g., "ethereum", "polygon", "base")
+   * @param details Optional details string
+   * @returns This trace builder for chaining
+   */
+  addSafeMsgHint(msgHint: string, chain: ChainName, details?: string): this {
+    if (this.closed) {
+      console.warn('[MiradorTrace] Trace is closed. Ignoring addSafeMsgHint call.');
+      return this;
+    }
+
+    this.pendingSafeMsgHints.push({
+      messageHash: msgHint,
+      chain,
+      details,
+      timestamp: new Date(),
+    });
+    this.scheduleFlush();
+    return this;
+  }
+
+  /**
    * Add transaction input data (calldata) as a trace event.
    * Useful for debugging failed transactions where input data is still available.
    * @param inputData The hex-encoded transaction input data (e.g., "0xa9059cbb...")
@@ -544,7 +569,8 @@ export class Trace {
       Object.keys(this.pendingAttributes).length > 0 ||
       this.pendingTags.length > 0 ||
       this.pendingEvents.length > 0 ||
-      this.pendingTxHashHints.length > 0;
+      this.pendingTxHashHints.length > 0 ||
+      this.pendingSafeMsgHints.length > 0;
 
     if (!hasPendingData && this.traceId !== null) {
       return; // Nothing to flush
@@ -630,6 +656,20 @@ export class Trace {
       ts.fromDate(hint.timestamp);
       hintMsg.setTimestamp(ts);
       traceData.addTxHashHints(hintMsg);
+    }
+
+    // Add pending safe msg hints
+    for (const hint of this.pendingSafeMsgHints) {
+      const hintMsg = new SafeMsgHintProto();
+      hintMsg.setMessageHash(hint.messageHash);
+      hintMsg.setChain(CHAIN_MAP[hint.chain]);
+      if (hint.details) {
+        hintMsg.setDetails(hint.details);
+      }
+      const ts = new Timestamp();
+      ts.fromDate(hint.timestamp);
+      hintMsg.setTimestamp(ts);
+      traceData.addSafeMsgHints(hintMsg);
     }
 
     return traceData;
@@ -728,6 +768,7 @@ export class Trace {
     this.pendingTags = [];
     this.pendingEvents = [];
     this.pendingTxHashHints = [];
+    this.pendingSafeMsgHints = [];
   }
 
   /**

@@ -554,6 +554,107 @@ describe('Trace', () => {
     });
   });
 
+  describe('addSafeMsgHint', () => {
+    it('should add a safe message hint with chain and message hash', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addSafeMsgHint('0xmsgHash123', 'ethereum');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const hints = request.getData()!.getSafeMsgHintsList();
+      expect(hints).toHaveLength(1);
+      expect(hints[0].getMessageHash()).toBe('0xmsgHash123');
+      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+    });
+
+    it('should add a safe message hint with details', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addSafeMsgHint('0xmsgHash456', 'polygon', 'multisig approval');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const hints = request.getData()!.getSafeMsgHintsList();
+      expect(hints[0].getMessageHash()).toBe('0xmsgHash456');
+      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[0].getDetails()).toBe('multisig approval');
+    });
+
+    it('should support multiple safe message hints', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addSafeMsgHint('0xmsg1', 'ethereum')
+        .addSafeMsgHint('0xmsg2', 'base', 'second hint');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const hints = request.getData()!.getSafeMsgHintsList();
+      expect(hints).toHaveLength(2);
+      expect(hints[0].getMessageHash()).toBe('0xmsg1');
+      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[1].getMessageHash()).toBe('0xmsg2');
+      expect(hints[1].getChain()).toBe(Chain.CHAIN_BASE);
+      expect(hints[1].getDetails()).toBe('second hint');
+    });
+
+    it('should handle different chain names', async () => {
+      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: Chain }> = [
+        { chain: 'ethereum', expected: Chain.CHAIN_ETHEREUM },
+        { chain: 'polygon', expected: Chain.CHAIN_POLYGON },
+        { chain: 'arbitrum', expected: Chain.CHAIN_ARBITRUM },
+        { chain: 'base', expected: Chain.CHAIN_BASE },
+        { chain: 'optimism', expected: Chain.CHAIN_OPTIMISM },
+        { chain: 'bsc', expected: Chain.CHAIN_BSC },
+      ];
+
+      for (const { chain, expected } of chainTests) {
+        mockCreateTrace.mockClear();
+        mockCreateTrace.mockResolvedValue({
+          getTraceId: () => 'trace-456',
+          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+        });
+
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+          .addSafeMsgHint('0xmsg', chain);
+
+        trace.flush();
+        await flushPromises();
+
+        const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+        const hints = request.getData()!.getSafeMsgHintsList();
+        expect(hints[0].getChain()).toBe(expected);
+      }
+    });
+
+    it('should return this for chaining', () => {
+      const trace = client.trace({ name: 'TestTrace' });
+      expect(trace.addSafeMsgHint('0xmsg', 'ethereum')).toBe(trace);
+    });
+
+    it('should work alongside txHashHints and other builder methods', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .addAttribute('safe_address', '0x1234')
+        .addTag('multisig')
+        .addEvent('proposed', 'token transfer')
+        .addTxHint('0xtx123', 'ethereum')
+        .addSafeMsgHint('0xmsg123', 'ethereum', 'approval');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(request.getData()!.getTxHashHintsList()).toHaveLength(1);
+      const safeMsgHints = request.getData()!.getSafeMsgHintsList();
+      expect(safeMsgHints).toHaveLength(1);
+      expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
+      expect(safeMsgHints[0].getDetails()).toBe('approval');
+    });
+  });
+
   describe('addTx', () => {
     it('should extract hash and chain from TransactionLike', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
