@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/miradorlabs/web-sdk/compare/v1.3.0...v1.4.0) (2026-03-04)
+
+
+### Features
+
+* add safe msg hint functionality ([29518b7](https://github.com/miradorlabs/web-sdk/commit/29518b7a288496febb027a1a625a6c1026c7637f))
+* add safe msg hint functionality ([47fe933](https://github.com/miradorlabs/web-sdk/commit/47fe933c1d752183a0941372373bf2e7d8a79b92))
+
 ## [1.3.0](https://github.com/miradorlabs/web-sdk/compare/v1.2.0...v1.3.0) (2026-02-27)
 
 
