@@ -139,6 +139,16 @@ export interface TxHashHint {
 }
 
 /**
+ * Safe message hint for Safe multisig message tracking
+ */
+export interface SafeMsgHintData {
+  messageHash: string;
+  chain: ChainName;
+  details?: string;
+  timestamp: Date;
+}
+
+/**
  * A single frame in a stack trace
  */
 export interface StackFrame {

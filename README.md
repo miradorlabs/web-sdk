@@ -19,6 +19,7 @@ npm install @miradorlabs/web-sdk
 - **TypeScript Support** - Full type definitions included
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
+- **Safe Multisig Tracking** - Track Safe message confirmations with `addSafeMsgHint()`
 
 ## Quick Start (Default)
 
@@ -295,6 +296,21 @@ trace.addTxHint('0x123...', 'ethereum', 'Main transaction')
 | `chain` | `ChainName` | Chain name: 'ethereum' \| 'polygon' \| 'arbitrum' \| 'base' \| 'optimism' \| 'bsc' |
 | `details` | `string` | Optional details about the transaction |
 
+#### `addSafeMsgHint(msgHint, chain, details?)`
+
+Add a Safe message hint for tracking Safe multisig message confirmations. Mirador will monitor the Safe contract for confirmation events related to the given message hash.
+
+```typescript
+trace.addSafeMsgHint('0xmsgHash...', 'ethereum')
+     .addSafeMsgHint('0xotherHash...', 'base', 'Token approval')
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `msgHint` | `string` | The Safe message hash to track |
+| `chain` | `ChainName` | Chain name: `'ethereum'` \| `'polygon'` \| `'arbitrum'` \| `'base'` \| `'optimism'` \| `'bsc'` |
+| `details` | `string` | Optional details about the message |
+
 #### `addTxInputData(inputData)`
 
 Add transaction input data (calldata) as a trace event. This is the hex-encoded data field from a transaction, useful for debugging failed transactions where the calldata is still available even though the transaction reverted.
@@ -365,7 +381,7 @@ await trace.close('User completed workflow');
 Returns: `Promise<void>`
 
 **Important:** Once a trace is closed:
-- All method calls (`addAttribute`, `addEvent`, `addTag`, `addTxHint`, `flush`) will be ignored with a warning
+- All method calls (`addAttribute`, `addEvent`, `addTag`, `addTxHint`, `addSafeMsgHint`, `flush`) will be ignored with a warning
 - The keep-alive timer will be stopped
 - A close request will be sent to the server
 
@@ -648,6 +664,7 @@ A complete working example is available in the [`example/`](./example/) director
 - Creating and managing traces
 - Adding attributes, tags, and events
 - Blockchain transaction correlation with `addTxHint()`
+- Safe multisig message tracking with `addSafeMsgHint()` (optional, commented example)
 - Network switching and balance display
 
 To run the example:

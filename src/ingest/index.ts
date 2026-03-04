@@ -21,6 +21,7 @@ export type {
   ClientMetadata,
   TraceEvent,
   TxHashHint,
+  SafeMsgHintData,
   ChainName,
   AddEventOptions,
   StackFrame,
