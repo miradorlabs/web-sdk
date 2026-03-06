@@ -58,7 +58,7 @@ interface ResolvedTraceOptions {
   keepAliveIntervalMs: number;
   autoClose: boolean;
   provider?: EIP1193Provider;
-  keepAlive: boolean;
+  autoKeepAlive: boolean;
 }
 
 /**
@@ -107,7 +107,7 @@ export class Trace {
   private microtaskScheduled: boolean = false;
 
   // Keep-alive configuration
-  private keepAliveEnabled: boolean;
+  private autoKeepAlive: boolean;
   private keepAliveIntervalMs: number;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -144,7 +144,7 @@ export class Trace {
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
-    this.keepAliveEnabled = options.keepAlive;
+    this.autoKeepAlive = options.autoKeepAlive;
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
     this.autoClose = options.autoClose;
 
@@ -730,7 +730,7 @@ export class Trace {
       );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         this.traceId = response.getTraceId();
-        if (this.keepAliveEnabled) {
+        if (this.autoKeepAlive) {
           this.startKeepAlive();
         }
       } else {
@@ -756,7 +756,7 @@ export class Trace {
       );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
-      } else if (this.keepAliveEnabled) {
+      } else if (this.autoKeepAlive) {
         // Start keep-alive if not already running (e.g., first update for a resumed trace)
         this.startKeepAlive();
       }

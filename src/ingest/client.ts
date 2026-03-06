@@ -91,7 +91,7 @@ export class Client {
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: options?.autoClose ?? DEFAULT_AUTO_CLOSE,
       provider: options?.provider ?? this.provider,
-      keepAlive: options?.keepAlive ?? !options?.traceId,
+      autoKeepAlive: options?.autoKeepAlive ?? !options?.traceId,
     });
   }
 }

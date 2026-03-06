@@ -1272,12 +1272,12 @@ describe('Trace', () => {
         expect(backendTrace.isClosed()).toBe(false);
       });
 
-      it('backend can opt into keepalive with keepAlive: true if it takes ownership', async () => {
+      it('backend can opt into keepalive with autoKeepAlive: true if it takes ownership', async () => {
         // Edge case: backend explicitly wants keepalive (e.g., it becomes the new owner)
         const backendClient = new Client('backend-api-key');
         const backendTrace = backendClient.trace({
           traceId: 'frontend-trace-abc',
-          keepAlive: true,
+          autoKeepAlive: true,
           includeUserMeta: false,
         });
 
@@ -1297,7 +1297,7 @@ describe('Trace', () => {
       });
     });
 
-    describe('keepAlive option', () => {
+    describe('autoKeepAlive option', () => {
       it('should NOT start keep-alive when traceId is provided (default behavior)', async () => {
         const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', includeUserMeta: false });
         trace.addAttribute('key', 'value');
@@ -1322,8 +1322,8 @@ describe('Trace', () => {
         expect(mockInstance.keepAlive).toHaveBeenCalled();
       });
 
-      it('should start keep-alive when keepAlive: true overrides traceId default', async () => {
-        const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', keepAlive: true, includeUserMeta: false });
+      it('should start keep-alive when autoKeepAlive: true overrides traceId default', async () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', autoKeepAlive: true, includeUserMeta: false });
         trace.addAttribute('key', 'value');
         trace.flush();
 
@@ -1334,8 +1334,8 @@ describe('Trace', () => {
         expect(mockInstance.keepAlive).toHaveBeenCalled();
       });
 
-      it('should NOT start keep-alive when keepAlive: false suppresses it for new trace', async () => {
-        const trace = client.trace({ name: 'TestTrace', keepAlive: false, includeUserMeta: false });
+      it('should NOT start keep-alive when autoKeepAlive: false suppresses it for new trace', async () => {
+        const trace = client.trace({ name: 'TestTrace', autoKeepAlive: false, includeUserMeta: false });
         trace.addAttribute('key', 'value');
         trace.flush();
 
