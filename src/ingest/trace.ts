@@ -58,6 +58,7 @@ interface ResolvedTraceOptions {
   keepAliveIntervalMs: number;
   autoClose: boolean;
   provider?: EIP1193Provider;
+  autoKeepAlive: boolean;
 }
 
 /**
@@ -106,6 +107,7 @@ export class Trace {
   private microtaskScheduled: boolean = false;
 
   // Keep-alive configuration
+  private autoKeepAlive: boolean;
   private keepAliveIntervalMs: number;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -142,6 +144,7 @@ export class Trace {
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
+    this.autoKeepAlive = options.autoKeepAlive;
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
     this.autoClose = options.autoClose;
 
@@ -727,7 +730,9 @@ export class Trace {
       );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         this.traceId = response.getTraceId();
-        this.startKeepAlive();
+        if (this.autoKeepAlive) {
+          this.startKeepAlive();
+        }
       } else {
         console.error('[MiradorTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
       }
@@ -751,7 +756,7 @@ export class Trace {
       );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
         console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
-      } else {
+      } else if (this.autoKeepAlive) {
         // Start keep-alive if not already running (e.g., first update for a resumed trace)
         this.startKeepAlive();
       }
@@ -772,9 +777,10 @@ export class Trace {
   }
 
   /**
-   * Start the keep-alive timer to ping the server periodically
+   * Start the keep-alive timer to ping the server periodically.
+   * Called automatically for new traces. Call manually to enable keepalive on resumed traces.
    */
-  private startKeepAlive(): void {
+  startKeepAlive(): void {
     if (this.keepAliveTimer !== null) {
       return; // Already started
     }
@@ -808,7 +814,7 @@ export class Trace {
   /**
    * Stop the keep-alive timer
    */
-  private stopKeepAlive(): void {
+  stopKeepAlive(): void {
     if (this.keepAliveTimer !== null) {
       clearInterval(this.keepAliveTimer);
       this.keepAliveTimer = null;
