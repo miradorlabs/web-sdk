@@ -46,6 +46,18 @@ export interface MiradorProviderOptions {
 }
 
 /**
+ * Error information reported via the onError callback
+ */
+export interface MiradorError {
+  operation: 'CreateTrace' | 'UpdateTrace' | 'KeepAlive' | 'CloseTrace';
+  error: Error;
+  traceName?: string;
+  traceId?: string;
+  /** true if all retries have been exhausted */
+  final: boolean;
+}
+
+/**
  * Options for Client constructor
  */
 export interface ClientOptions {
@@ -55,6 +67,10 @@ export interface ClientOptions {
   keepAliveIntervalMs?: number;
   /** EIP-1193 provider to use for transaction operations */
   provider?: EIP1193Provider;
+  /** Per-call timeout in milliseconds for gRPC operations (default: 5000) */
+  callTimeoutMs?: number;
+  /** Callback invoked when SDK operations fail. Falls back to console.error if not set. */
+  onError?: (error: MiradorError) => void;
 }
 
 /**
@@ -75,6 +91,10 @@ export interface TraceOptions {
   autoClose?: boolean;
   /** EIP-1193 provider to use for transaction operations */
   provider?: EIP1193Provider;
+  /** Total time budget for retries in milliseconds (default: 10000). Retries stop early if budget is exhausted. */
+  retryBudgetMs?: number;
+  /** Maximum trace lifetime in milliseconds (default: 1800000 / 30 minutes). Auto-closes trace after this duration. */
+  maxTraceLifetimeMs?: number;
 }
 
 /**

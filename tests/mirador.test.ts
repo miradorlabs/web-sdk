@@ -1744,3 +1744,289 @@ describe('MiradorProvider', () => {
     expect(args).toEqual(argsCopy);
   });
 });
+
+describe('Resilience', () => {
+  let mockCreateTrace: jest.Mock;
+  let mockUpdateTrace: jest.Mock;
+  let mockKeepAlive: jest.Mock;
+  let mockCloseTrace: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockCreateTrace = jest.fn().mockResolvedValue({
+      getTraceId: () => 'trace-res-123',
+      getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+    });
+
+    mockUpdateTrace = jest.fn().mockResolvedValue({
+      getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
+    });
+
+    mockKeepAlive = jest.fn().mockResolvedValue({ getAccepted: () => true });
+    mockCloseTrace = jest.fn().mockResolvedValue({ getAccepted: () => true });
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: mockCreateTrace,
+      updateTrace: mockUpdateTrace,
+      keepAlive: mockKeepAlive,
+      closeTrace: mockCloseTrace,
+    }));
+  });
+
+  // Helper: advance fake timers and drain promise queue
+  async function advanceAndFlush(ms: number): Promise<void> {
+    jest.advanceTimersByTime(ms);
+    // Drain the promise microtask queue multiple times to handle chained promises
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  describe('per-call timeouts', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
+
+    it('should timeout a hanging gRPC call', async () => {
+      const onError = jest.fn();
+      mockCreateTrace.mockReturnValue(new Promise(() => {}));
+
+      const client = new Client('test-key', { callTimeoutMs: 100, onError });
+      const trace = client.trace({ name: 'HangTest', includeUserMeta: false, maxRetries: 0 });
+      trace.flush();
+
+      // Advance past the timeout and drain promises
+      await advanceAndFlush(200);
+      await advanceAndFlush(200);
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'CreateTrace',
+          final: true,
+          error: expect.objectContaining({ message: expect.stringContaining('Timeout') }),
+        })
+      );
+    });
+  });
+
+  describe('keepAlive resilience', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
+
+    it('should skip keepAlive tick if previous is still in-flight', async () => {
+      const client = new Client('test-key', { keepAliveIntervalMs: 100 });
+      const trace = client.trace({ name: 'InFlight', includeUserMeta: false });
+      trace.flush();
+
+      // Let createTrace resolve so keepAlive timer starts
+      await advanceAndFlush(10);
+
+      // Make keepAlive hang
+      let resolveKeepAlive!: (v: unknown) => void;
+      mockKeepAlive.mockReturnValueOnce(new Promise((res) => { resolveKeepAlive = res; }));
+
+      // First tick fires keepAlive (hangs)
+      await advanceAndFlush(100);
+
+      // Second tick fires but should skip because first is in-flight
+      await advanceAndFlush(100);
+
+      // Only one call should have been made
+      expect(mockKeepAlive).toHaveBeenCalledTimes(1);
+
+      // Resolve the hanging keepAlive
+      resolveKeepAlive({ getAccepted: () => true });
+      await advanceAndFlush(0);
+    });
+
+    it('should stop keepAlive after 3 consecutive failures', async () => {
+      const onError = jest.fn();
+      const client = new Client('test-key', { keepAliveIntervalMs: 100, callTimeoutMs: 5000, onError });
+      const trace = client.trace({ name: 'FailStop', includeUserMeta: false });
+      trace.flush();
+
+      // Let createTrace resolve
+      await advanceAndFlush(10);
+
+      // Make keepAlive fail immediately
+      mockKeepAlive.mockRejectedValue(new Error('network error'));
+
+      // Tick 1, 2, 3 — each fails
+      for (let i = 0; i < 3; i++) {
+        await advanceAndFlush(100);
+      }
+
+      // After 3 failures, the final call should be reported with final: true
+      const finalCall = onError.mock.calls.find(
+        (c: unknown[]) => (c[0] as { operation: string; final: boolean }).operation === 'KeepAlive' && (c[0] as { final: boolean }).final === true
+      );
+      expect(finalCall).toBeDefined();
+
+      // 4th tick should not fire (timer stopped)
+      mockKeepAlive.mockClear();
+      await advanceAndFlush(100);
+      expect(mockKeepAlive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('close() timeout', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
+
+    it('should not hang indefinitely if closeTrace hangs', async () => {
+      const client = new Client('test-key');
+      const trace = client.trace({ name: 'CloseHang', includeUserMeta: false });
+      trace.flush();
+
+      // Let createTrace resolve
+      await advanceAndFlush(10);
+
+      // Make closeTrace hang
+      mockCloseTrace.mockReturnValue(new Promise(() => {}));
+
+      const closePromise = trace.close('test');
+
+      // Advance past the 3s close timeout (flush queue + close timeout)
+      await advanceAndFlush(3500);
+      await advanceAndFlush(3500);
+
+      // close() should resolve (not hang)
+      await closePromise;
+      expect(trace.isClosed()).toBe(true);
+    });
+  });
+
+  describe('retry budget', () => {
+    it('should stop retrying when budget is exhausted', async () => {
+      const onError = jest.fn();
+      // Fail immediately (no hanging, no timeout needed)
+      mockCreateTrace.mockRejectedValue(new Error('fail'));
+
+      const client = new Client('test-key', { callTimeoutMs: 5000, onError });
+      const trace = client.trace({
+        name: 'BudgetTest',
+        includeUserMeta: false,
+        maxRetries: 10,
+        retryBudgetMs: 600,
+        retryBackoff: 200,
+      });
+      trace.flush();
+
+      // Let all retries run with real timers
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Budget of 600ms with 200ms backoff (200, 400, ...): should only get ~2 retries before budget exhausted
+      // So total calls should be first attempt + ~2 retries = ~3, but definitely < 11
+      expect(mockCreateTrace.mock.calls.length).toBeLessThan(6);
+      expect(mockCreateTrace.mock.calls.length).toBeGreaterThanOrEqual(2);
+    }, 10000);
+  });
+
+  describe('flush queue depth limit', () => {
+    it('should drop flushes when queue is full', async () => {
+      const onError = jest.fn();
+      // Make createTrace hang so queue fills up
+      mockCreateTrace.mockReturnValue(new Promise(() => {}));
+
+      const client = new Client('test-key', { onError });
+      const trace = client.trace({ name: 'QueueDepth', includeUserMeta: false });
+
+      // First flush enters the queue (createTrace)
+      trace.flush();
+      await flushMicrotasks();
+
+      // Add 9 more (total 10 = at cap)
+      for (let i = 0; i < 9; i++) {
+        trace.addAttribute('key', `value-${i}`);
+        trace.flush();
+      }
+
+      // 11th flush should be dropped
+      trace.addAttribute('key', 'overflow');
+      trace.flush();
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ message: expect.stringContaining('queue depth limit') }),
+        })
+      );
+    });
+  });
+
+  describe('onError callback', () => {
+    it('should call onError instead of console.error on CreateTrace failure', async () => {
+      const onError = jest.fn();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockCreateTrace.mockRejectedValue(new Error('gRPC down'));
+
+      const client = new Client('test-key', { callTimeoutMs: 5000, onError });
+      const trace = client.trace({ name: 'ErrorCb', includeUserMeta: false, maxRetries: 0 });
+      trace.flush();
+
+      await flushPromises();
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'CreateTrace',
+          final: true,
+          traceName: 'ErrorCb',
+        })
+      );
+      // Should NOT have fallen through to console.error for final error
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('should fall back to console.error if onError is not set', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockCreateTrace.mockRejectedValue(new Error('gRPC down'));
+
+      const client = new Client('test-key', { callTimeoutMs: 5000 });
+      const trace = client.trace({ name: 'NoCallback', includeUserMeta: false, maxRetries: 0 });
+      trace.flush();
+
+      await flushPromises();
+
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('should not throw if onError throws', async () => {
+      const onError = jest.fn().mockImplementation(() => { throw new Error('callback error'); });
+      mockCreateTrace.mockRejectedValue(new Error('gRPC down'));
+
+      const client = new Client('test-key', { callTimeoutMs: 5000, onError });
+      const trace = client.trace({ name: 'ThrowCb', includeUserMeta: false, maxRetries: 0 });
+      trace.flush();
+
+      // Should not throw
+      await flushPromises();
+      expect(onError).toHaveBeenCalled();
+    });
+  });
+
+  describe('max trace lifetime', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
+
+    it('should auto-close trace after maxTraceLifetimeMs', async () => {
+      const client = new Client('test-key', { keepAliveIntervalMs: 1000 });
+      const trace = client.trace({
+        name: 'LifetimeTest',
+        includeUserMeta: false,
+        maxTraceLifetimeMs: 5000,
+      });
+      trace.flush();
+
+      // Let createTrace resolve
+      await advanceAndFlush(10);
+
+      expect(trace.isClosed()).toBe(false);
+
+      // Advance past the lifetime — keepAlive fires at 1s intervals, checks lifetime
+      await advanceAndFlush(6000);
+
+      expect(trace.isClosed()).toBe(true);
+    });
+  });
+});

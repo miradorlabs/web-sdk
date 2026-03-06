@@ -31,6 +31,7 @@ export type {
   TransactionLike,
   TransactionRequest,
   MiradorProviderOptions,
+  MiradorError,
 } from './types';
 
 // Metadata utilities (for advanced usage)

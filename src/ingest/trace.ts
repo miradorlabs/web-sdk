@@ -20,7 +20,7 @@ import {
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import type { TraceEvent, TxHashHint, SafeMsgHintData, ChainName, AddEventOptions, StackTrace, EIP1193Provider, TxHintOptions, TransactionLike, TransactionRequest } from './types';
+import type { TraceEvent, TxHashHint, SafeMsgHintData, ChainName, AddEventOptions, StackTrace, EIP1193Provider, TxHintOptions, TransactionLike, TransactionRequest, MiradorError } from './types';
 import { getClientMetadata } from './metadata';
 import { captureStackTrace } from './stacktrace';
 import { chainIdToName } from './chains';
@@ -58,6 +58,10 @@ interface ResolvedTraceOptions {
   keepAliveIntervalMs: number;
   autoClose: boolean;
   provider?: EIP1193Provider;
+  callTimeoutMs: number;
+  retryBudgetMs: number;
+  maxTraceLifetimeMs: number;
+  onError?: (error: MiradorError) => void;
 }
 
 /**
@@ -116,6 +120,24 @@ export class Trace {
   // Retry configuration
   private maxRetries: number;
   private retryBackoff: number;
+  private callTimeoutMs: number;
+  private retryBudgetMs: number;
+
+  // KeepAlive resilience
+  private keepAliveInFlight: boolean = false;
+  private keepAliveConsecutiveFailures: number = 0;
+  private static readonly MAX_KEEPALIVE_FAILURES = 3;
+
+  // Flush queue depth limit
+  private flushQueueDepth: number = 0;
+  private static readonly MAX_FLUSH_QUEUE_DEPTH = 10;
+
+  // Max trace lifetime
+  private maxTraceLifetimeMs: number;
+  private traceCreatedAt: number = Date.now();
+
+  // Error reporting
+  private onError?: (error: MiradorError) => void;
 
   // State tracking
   private traceId: string | null = null;
@@ -142,6 +164,10 @@ export class Trace {
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
+    this.callTimeoutMs = options.callTimeoutMs;
+    this.retryBudgetMs = options.retryBudgetMs;
+    this.maxTraceLifetimeMs = options.maxTraceLifetimeMs;
+    this.onError = options.onError;
     this.keepAliveIntervalMs = options.keepAliveIntervalMs;
     this.autoClose = options.autoClose;
 
@@ -581,13 +607,23 @@ export class Trace {
 
     // Capture context for error reporting
     const isCreateOp = this.traceId === null;
-    const traceName = this.name;
 
     // Clear pending immediately so next flush doesn't re-send
     this.clearPending();
 
+    // Check flush queue depth limit
+    if (this.flushQueueDepth >= Trace.MAX_FLUSH_QUEUE_DEPTH) {
+      this.reportError(
+        isCreateOp ? 'CreateTrace' : 'UpdateTrace',
+        new Error('Flush queue depth limit reached, dropping flush'),
+        false,
+      );
+      return;
+    }
+
     // Chain onto the queue for strict ordering
     // Check traceId inside the queue to ensure proper ordering
+    this.flushQueueDepth++;
     this.flushQueue = this.flushQueue.then(async () => {
       if (this.traceId === null) {
         await this.createTrace(traceData);
@@ -596,8 +632,9 @@ export class Trace {
       }
     }).catch(err => {
       const operation = isCreateOp ? 'CreateTrace' : 'UpdateTrace';
-      const context = traceName ? ` (trace: ${traceName})` : '';
-      console.error(`[MiradorTrace] Flush error during ${operation}${context}:`, err);
+      this.reportError(operation, err as Error, true);
+    }).finally(() => {
+      this.flushQueueDepth--;
     });
   }
 
@@ -683,25 +720,69 @@ export class Trace {
   }
 
   /**
-   * Execute an operation with exponential backoff retry
+   * Race a promise against a timeout
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
+      promise.then(
+        (val) => { clearTimeout(timer); resolve(val); },
+        (err) => { clearTimeout(timer); reject(err); },
+      );
+    });
+  }
+
+  /**
+   * Report an error via the onError callback, falling back to console.error
+   */
+  private reportError(
+    operation: MiradorError['operation'],
+    error: Error,
+    final: boolean,
+  ): void {
+    const miradorError: MiradorError = {
+      operation,
+      error,
+      traceName: this.name,
+      traceId: this.traceId ?? undefined,
+      final,
+    };
+
+    if (this.onError) {
+      try { this.onError(miradorError); } catch { /* never throw from error handler */ }
+    } else {
+      console.error(`[MiradorTrace] ${operation} error${final ? ' (final)' : ''}:`, error);
+    }
+  }
+
+  /**
+   * Execute an operation with exponential backoff retry, per-call timeout, and retry budget
    */
   private async retryWithBackoff<T>(
     operation: () => Promise<T>,
     operationName: string
   ): Promise<T> {
     let lastError: Error | undefined;
+    const startTime = Date.now();
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      // Check retry budget before each attempt (after the first)
+      if (attempt > 0 && (Date.now() - startTime) >= this.retryBudgetMs) {
+        break;
+      }
+
       try {
-        return await operation();
+        return await this.withTimeout(operation(), this.callTimeoutMs);
       } catch (err) {
         lastError = err as Error;
 
         if (attempt < this.maxRetries) {
           const delay = this.retryBackoff * Math.pow(2, attempt);
-          console.warn(
-            `[MiradorTrace] ${operationName} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
-          );
+          // Check if the next sleep + attempt would exceed the budget
+          if ((Date.now() - startTime) + delay >= this.retryBudgetMs) {
+            break;
+          }
+          this.reportError(operationName as MiradorError['operation'], lastError, false);
           await this.sleep(delay);
         }
       }
@@ -729,10 +810,10 @@ export class Trace {
         this.traceId = response.getTraceId();
         this.startKeepAlive();
       } else {
-        console.error('[MiradorTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
+        this.reportError('CreateTrace', new Error(response.getStatus()?.getErrorMessage() || 'Unknown error'), true);
       }
     } catch (err) {
-      console.error('[MiradorTrace] CreateTrace error after retries:', err);
+      this.reportError('CreateTrace', err as Error, true);
     }
   }
 
@@ -750,13 +831,13 @@ export class Trace {
         'UpdateTrace'
       );
       if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
+        this.reportError('UpdateTrace', new Error(response.getStatus()?.getErrorMessage() || 'Unknown error'), true);
       } else {
         // Start keep-alive if not already running (e.g., first update for a resumed trace)
         this.startKeepAlive();
       }
     } catch (err) {
-      console.error('[MiradorTrace] UpdateTrace error after retries:', err);
+      this.reportError('UpdateTrace', err as Error, true);
     }
   }
 
@@ -780,6 +861,11 @@ export class Trace {
     }
 
     this.keepAliveTimer = setInterval(() => {
+      // Max trace lifetime safety net
+      if (Date.now() - this.traceCreatedAt >= this.maxTraceLifetimeMs) {
+        this.close('Max trace lifetime exceeded');
+        return;
+      }
       this.sendKeepAlive();
     }, this.keepAliveIntervalMs);
   }
@@ -792,16 +878,32 @@ export class Trace {
       return;
     }
 
+    // In-flight guard — skip if previous keepAlive hasn't completed
+    if (this.keepAliveInFlight) {
+      return;
+    }
+
+    this.keepAliveInFlight = true;
     const request = new KeepAliveRequest();
     request.setTraceId(this.traceId);
 
     try {
-      const response = await this.client._keepAlive(request);
+      const response = await this.withTimeout(
+        this.client._keepAlive(request),
+        this.callTimeoutMs,
+      );
       if (!response.getAccepted()) {
-        console.warn('[MiradorTrace] KeepAlive was not accepted by server');
+        this.reportError('KeepAlive', new Error('KeepAlive was not accepted by server'), false);
       }
+      this.keepAliveConsecutiveFailures = 0;
     } catch (err) {
-      console.error('[MiradorTrace] KeepAlive error:', err);
+      this.keepAliveConsecutiveFailures++;
+      this.reportError('KeepAlive', err as Error, this.keepAliveConsecutiveFailures >= Trace.MAX_KEEPALIVE_FAILURES);
+      if (this.keepAliveConsecutiveFailures >= Trace.MAX_KEEPALIVE_FAILURES) {
+        this.stopKeepAlive();
+      }
+    } finally {
+      this.keepAliveInFlight = false;
     }
   }
 
@@ -838,7 +940,10 @@ export class Trace {
       this.unloadHandler = null;
     }
 
-    // Send close request if we have a trace ID
+    // Wait for flush queue with a timeout to avoid indefinite hangs
+    await Promise.race([this.flushQueue, this.sleep(3000)]);
+
+    // Send close request if we have a trace ID — best effort, no retries
     if (this.traceId) {
       const request = new CloseTraceRequest();
       request.setTraceId(this.traceId);
@@ -847,12 +952,15 @@ export class Trace {
       }
 
       try {
-        const response = await this.client._closeTrace(request);
+        const response = await this.withTimeout(
+          this.client._closeTrace(request),
+          3000,
+        );
         if (!response.getAccepted()) {
-          console.warn('[MiradorTrace] CloseTrace was not accepted by server');
+          this.reportError('CloseTrace', new Error('CloseTrace was not accepted by server'), true);
         }
       } catch (err) {
-        console.error('[MiradorTrace] CloseTrace error:', err);
+        this.reportError('CloseTrace', err as Error, true);
       }
     }
   }
