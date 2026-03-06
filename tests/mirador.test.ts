@@ -1,5 +1,5 @@
 // Mirador Client and Mirador Trace Unit Tests
-import { Client, Trace, captureStackTrace, chainIdToName, MiradorProvider } from '../src/ingest';
+import { Client, Trace, NoopTrace, captureStackTrace, chainIdToName, MiradorProvider } from '../src/ingest';
 import type { StackTrace, EIP1193Provider, TransactionRequest } from '../src/ingest';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { CreateTraceRequest, Chain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
@@ -363,9 +363,11 @@ describe('Trace', () => {
   describe('error handling', () => {
     it('should handle CreateTrace failure gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      // Create client with debug: true so logger outputs to console
+      const debugClient = new Client('test-api-key', { debug: true });
       mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
 
-      const trace = client.trace({ name: 'TestTrace', maxRetries: 0 })
+      const trace = debugClient.trace({ name: 'TestTrace', maxRetries: 0 })
         .addAttribute('key', 'value');
 
       trace.flush();
@@ -1057,7 +1059,9 @@ describe('Trace', () => {
       });
 
       it('should be ignored when trace is closed', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        // Use debug client so logger outputs to console
+        const debugClient = new Client('test-api-key', { debug: true });
+        const trace = debugClient.trace({ name: 'TestTrace', includeUserMeta: false })
           .addAttribute('key', 'value');
 
         trace.flush();
@@ -1074,7 +1078,8 @@ describe('Trace', () => {
       });
 
       it('should be ignored when trace ID is already set via CreateTrace', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        const debugClient = new Client('test-api-key', { debug: true });
+        const trace = debugClient.trace({ name: 'TestTrace', includeUserMeta: false })
           .addAttribute('key', 'value');
 
         trace.flush();
@@ -1090,7 +1095,8 @@ describe('Trace', () => {
       });
 
       it('should be ignored when trace ID is already set via setTraceId', () => {
-        const trace = client.trace({ name: 'TestTrace' });
+        const debugClient = new Client('test-api-key', { debug: true });
+        const trace = debugClient.trace({ name: 'TestTrace' });
         trace.setTraceId('first-id');
 
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
@@ -1938,5 +1944,746 @@ describe('MiradorProvider', () => {
     expect(mockUnderlying.request).toHaveBeenCalledWith(args);
     // Verify args were not mutated
     expect(args).toEqual(argsCopy);
+  });
+});
+
+describe('Resilience', () => {
+  let client: Client;
+  let mockCreateTrace: jest.Mock;
+  let mockUpdateTrace: jest.Mock;
+  let mockKeepAlive: jest.Mock;
+  let mockCloseTrace: jest.Mock;
+  let spyError: jest.SpyInstance;
+  let spyWarn: jest.SpyInstance;
+
+  function makeClient(opts?: { callTimeoutMs?: number; keepAliveIntervalMs?: number }) {
+    return new Client('test-key', { debug: true, ...opts });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    spyError = jest.spyOn(console, 'error').mockImplementation();
+    spyWarn = jest.spyOn(console, 'warn').mockImplementation();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    const mockCreateResponse = {
+      getStatus: () => successStatus,
+      getTraceId: () => 'trace-123',
+    };
+    const mockUpdateResponse = {
+      getStatus: () => successStatus,
+    };
+
+    mockCreateTrace = jest.fn().mockResolvedValue(mockCreateResponse);
+    mockUpdateTrace = jest.fn().mockResolvedValue(mockUpdateResponse);
+    mockKeepAlive = jest.fn().mockResolvedValue({ getAccepted: () => true });
+    mockCloseTrace = jest.fn().mockResolvedValue({ getAccepted: () => true });
+
+    // Set up mock BEFORE creating client
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: mockCreateTrace,
+      updateTrace: mockUpdateTrace,
+      keepAlive: mockKeepAlive,
+      closeTrace: mockCloseTrace,
+    }));
+
+    client = makeClient();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    spyError.mockRestore();
+    spyWarn.mockRestore();
+  });
+
+  it('should wrap gRPC calls with per-call timeout', async () => {
+    const slowClient = new Client('test-key', { callTimeoutMs: 100, debug: true });
+    mockCreateTrace.mockImplementation(() => new Promise(() => {})); // never resolves
+
+    const trace = slowClient.trace({
+      name: 'timeout-test',
+      includeUserMeta: false,
+      maxRetries: 0,
+    });
+    trace.flush();
+
+    // Wait for the 100ms timeout to fire
+    await new Promise(r => setTimeout(r, 200));
+
+    expect(spyError).toHaveBeenCalled();
+  });
+
+  it('should only retry on network and internal server errors', async () => {
+    // Auth error (code 16 = UNAUTHENTICATED) should NOT be retried
+    const authError = Object.assign(new Error('Unauthenticated'), { code: 16 });
+    mockCreateTrace.mockRejectedValue(authError);
+
+    const trace = client.trace({
+      name: 'selective-retry-test',
+      includeUserMeta: false,
+      maxRetries: 2,
+      retryBackoff: 1,
+    });
+    trace.flush();
+    await flushPromises();
+    await new Promise(r => setTimeout(r, 50));
+
+    // Should only be called once (no retries for auth errors)
+    expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry on UNAVAILABLE errors', async () => {
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+    const successResponse = {
+      getStatus: () => successStatus,
+      getTraceId: () => 'trace-retry',
+    };
+
+    const networkError = Object.assign(new Error('Connection refused'), { code: 14 });
+    mockCreateTrace
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(successResponse);
+
+    const trace = client.trace({
+      name: 'retry-test',
+      includeUserMeta: false,
+      maxRetries: 2,
+      retryBackoff: 1,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+  });
+
+  it('should abandon trace after retry exhaustion', async () => {
+    const networkError = Object.assign(new Error('Connection refused'), { code: 14 });
+    mockCreateTrace.mockRejectedValue(networkError);
+
+    const trace = client.trace({
+      name: 'abandon-test',
+      includeUserMeta: false,
+      maxRetries: 1,
+      retryBackoff: 1,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 100));
+
+    // After retry exhaustion, further calls should be ignored
+    mockCreateTrace.mockClear();
+    trace.addAttribute('ignored', 'value');
+    await flushMicrotasks();
+    await flushPromises();
+
+    expect(mockCreateTrace).not.toHaveBeenCalled();
+  });
+
+  it('should guard keepAlive against in-flight overlap', async () => {
+    const fastClient = new Client('test-key', { keepAliveIntervalMs: 100 });
+    let resolveKeepAlive: () => void;
+    mockKeepAlive.mockImplementation(() => new Promise(resolve => {
+      resolveKeepAlive = () => resolve({ getAccepted: () => true });
+    }));
+
+    const trace = fastClient.trace({
+      name: 'keepalive-guard-test',
+      includeUserMeta: false,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    // First keepAlive tick
+    await new Promise(r => setTimeout(r, 150));
+    expect(mockKeepAlive).toHaveBeenCalledTimes(1);
+
+    // Second tick while first is in-flight — should be skipped
+    await new Promise(r => setTimeout(r, 150));
+    expect(mockKeepAlive).toHaveBeenCalledTimes(1);
+
+    // Resolve the first, next tick should go through
+    resolveKeepAlive!();
+    await new Promise(r => setTimeout(r, 150));
+    expect(mockKeepAlive).toHaveBeenCalledTimes(2);
+
+    await trace.close();
+  });
+
+  it('should stop keepAlive after consecutive failures', async () => {
+    const fastClient = new Client('test-key', { keepAliveIntervalMs: 50, debug: true });
+    mockKeepAlive.mockRejectedValue(new Error('Network error'));
+
+    const trace = fastClient.trace({
+      name: 'keepalive-stop-test',
+      includeUserMeta: false,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 20));
+
+    // Wait for 3+ keepAlive ticks to trigger consecutive failure stop
+    // Each tick now makes 2 calls (original + 1 retry), so 3 ticks = 6 calls
+    await new Promise(r => setTimeout(r, 250));
+
+    expect(mockKeepAlive).toHaveBeenCalledTimes(6);
+    expect(spyWarn).toHaveBeenCalledWith(
+      '[MiradorTrace] KeepAlive stopped after consecutive failures'
+    );
+
+    // Further ticks should not call keepAlive
+    mockKeepAlive.mockClear();
+    await new Promise(r => setTimeout(r, 100));
+    expect(mockKeepAlive).not.toHaveBeenCalled();
+
+    await trace.close();
+  });
+
+  it('should timeout close() flush queue wait', async () => {
+    mockCreateTrace.mockImplementation(() => new Promise(() => {})); // never resolves
+
+    const trace = client.trace({
+      name: 'close-timeout-test',
+      includeUserMeta: false,
+      maxRetries: 0,
+    });
+    trace.flush();
+
+    // close() should not hang — it has a 3s timeout on flush queue
+    const closePromise = trace.close();
+    await new Promise(r => setTimeout(r, 3100));
+    await closePromise;
+
+    expect(trace.isClosed()).toBe(true);
+  });
+
+  it('should cap flush batch size and send overflow in next flush', async () => {
+    const trace = client.trace({
+      name: 'batch-size-test',
+      includeUserMeta: false,
+    });
+
+    // Add more events than MAX_FLUSH_BATCH_SIZE (100)
+    for (let i = 0; i < 120; i++) {
+      trace.addEvent(`event-${i}`, `details-${i}`);
+    }
+
+    trace.flush();
+    await flushPromises();
+    await new Promise(r => setTimeout(r, 50));
+
+    // Should have been called at least twice (first batch + overflow)
+    expect(mockCreateTrace.mock.calls.length + mockUpdateTrace.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('should auto-close trace when maxTraceLifetimeMs is exceeded', async () => {
+    const fastClient = new Client('test-key', { keepAliveIntervalMs: 50 });
+
+    const trace = fastClient.trace({
+      name: 'lifetime-test',
+      includeUserMeta: false,
+      maxTraceLifetimeMs: 100,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 20));
+
+    // Wait for keepAlive to detect lifetime exceeded
+    await new Promise(r => setTimeout(r, 200));
+
+    expect(trace.isClosed()).toBe(true);
+  });
+
+  it('should not auto-close when maxTraceLifetimeMs is 0 (disabled)', async () => {
+    const fastClient = new Client('test-key', { keepAliveIntervalMs: 50 });
+
+    const trace = fastClient.trace({
+      name: 'lifetime-disabled-test',
+      includeUserMeta: false,
+      // maxTraceLifetimeMs defaults to 0 (disabled)
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 20));
+
+    // Wait several keepAlive intervals
+    await new Promise(r => setTimeout(r, 200));
+
+    expect(trace.isClosed()).toBe(false);
+    await trace.close();
+  });
+
+  it('should skip close() network calls on abandoned trace', async () => {
+    const networkError = Object.assign(new Error('Connection refused'), { code: 14 });
+    mockCreateTrace.mockRejectedValue(networkError);
+
+    const trace = client.trace({
+      name: 'abandon-close-test',
+      includeUserMeta: false,
+      maxRetries: 0,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    // Trace should be abandoned now
+    mockCloseTrace.mockClear();
+    await trace.close();
+
+    // CloseTrace should NOT have been called
+    expect(mockCloseTrace).not.toHaveBeenCalled();
+  });
+
+  it('should retry CloseTrace once on failure', async () => {
+    const trace = client.trace({
+      name: 'close-retry-test',
+      includeUserMeta: false,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    // First close call fails, second succeeds
+    mockCloseTrace
+      .mockRejectedValueOnce(new Error('Temporary failure'))
+      .mockResolvedValueOnce({ getAccepted: () => true });
+
+    await trace.close('done');
+
+    // Should have been called twice (original + retry)
+    expect(mockCloseTrace).toHaveBeenCalledTimes(2);
+  });
+
+  it('should add jitter to retry backoff (non-deterministic delays)', async () => {
+    const networkError = Object.assign(new Error('Unavailable'), { code: 14 });
+    mockCreateTrace
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError);
+
+    const trace = client.trace({
+      name: 'jitter-test',
+      includeUserMeta: false,
+      maxRetries: 2,
+      retryBackoff: 100,
+    });
+    trace.flush();
+    // Jittered delays: random(0, 100) + random(0, 200) - max ~300ms
+    await new Promise(r => setTimeout(r, 500));
+
+    // All attempts should have been made
+    expect(mockCreateTrace).toHaveBeenCalledTimes(3);
+  });
+
+  it('should treat RESOURCE_EXHAUSTED (code 8) as retryable', async () => {
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+    const successResponse = {
+      getStatus: () => successStatus,
+      getTraceId: () => 'trace-rate-limited',
+    };
+
+    const rateLimitError = Object.assign(new Error('Resource exhausted'), { code: 8 });
+    mockCreateTrace
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce(successResponse);
+
+    const trace = client.trace({
+      name: 'rate-limit-test',
+      includeUserMeta: false,
+      maxRetries: 2,
+      retryBackoff: 1,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockCreateTrace).toHaveBeenCalledTimes(2);
+    expect(trace.getTraceId()).toBe('trace-rate-limited');
+  });
+
+  it('should set client-wide rate limit on RESOURCE_EXHAUSTED', async () => {
+    const rateLimitError = Object.assign(new Error('Resource exhausted'), { code: 8 });
+    mockCreateTrace.mockRejectedValue(rateLimitError);
+
+    const trace = client.trace({
+      name: 'rate-limit-global-test',
+      includeUserMeta: false,
+      maxRetries: 0,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    // Client should have a rateLimitedUntil set in the future
+    expect(client.rateLimitedUntil).toBeGreaterThan(Date.now());
+  });
+
+  it('should enforce queue size limits', async () => {
+    const trace = client.trace({
+      name: 'queue-limit-test',
+      includeUserMeta: false,
+      maxQueueSize: 5,
+    });
+
+    // The constructor adds 1 event (trace init), so only 4 more should fit
+    for (let i = 0; i < 10; i++) {
+      trace.addEvent(`event-${i}`, `details-${i}`);
+    }
+    trace.flush();
+    await flushPromises();
+    await new Promise(r => setTimeout(r, 50));
+
+    // Should have created the trace, check the request
+    const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+    const events = request.getData()!.getEventsList();
+    // Should be capped at 5 (1 init + 4 events)
+    expect(events.length).toBeLessThanOrEqual(5);
+  });
+
+  it('should invoke onDropped callback when queue is full', async () => {
+    const onDropped = jest.fn();
+    const trace = client.trace({
+      name: 'drop-callback-test',
+      includeUserMeta: false,
+      maxQueueSize: 3,
+      callbacks: { onDropped },
+    });
+
+    // Init event uses 1 slot, add enough to exceed limit
+    for (let i = 0; i < 10; i++) {
+      trace.addEvent(`event-${i}`, `details-${i}`);
+    }
+
+    expect(onDropped).toHaveBeenCalled();
+    expect(onDropped.mock.calls[0][1]).toBe('Queue full');
+    await trace.close();
+  });
+});
+
+describe('Lifecycle callbacks', () => {
+  let mockCreateTrace: jest.Mock;
+  let mockUpdateTrace: jest.Mock;
+  let mockCloseTrace: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    mockCreateTrace = jest.fn().mockResolvedValue({
+      getStatus: () => successStatus,
+      getTraceId: () => 'trace-cb',
+    });
+    mockUpdateTrace = jest.fn().mockResolvedValue({
+      getStatus: () => successStatus,
+    });
+    mockCloseTrace = jest.fn().mockResolvedValue({ getAccepted: () => true });
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: mockCreateTrace,
+      updateTrace: mockUpdateTrace,
+      keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      closeTrace: mockCloseTrace,
+    }));
+  });
+
+  it('should invoke onCreated and onFlushed on first flush', async () => {
+    const onCreated = jest.fn();
+    const onFlushed = jest.fn();
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'callback-test',
+      includeUserMeta: false,
+      callbacks: { onCreated, onFlushed },
+    });
+    trace.addAttribute('key', 'value');
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(onCreated).toHaveBeenCalledWith('trace-cb');
+    expect(onFlushed).toHaveBeenCalledWith('trace-cb', expect.any(Number));
+  });
+
+  it('should invoke onClosed when trace is closed', async () => {
+    const onClosed = jest.fn();
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'close-callback-test',
+      includeUserMeta: false,
+      callbacks: { onClosed },
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    await trace.close('test reason');
+
+    expect(onClosed).toHaveBeenCalledWith('trace-cb', 'test reason');
+  });
+
+  it('should invoke onFlushError when flush fails', async () => {
+    const onFlushError = jest.fn();
+    mockCreateTrace.mockRejectedValue(new Error('Network error'));
+
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'error-callback-test',
+      includeUserMeta: false,
+      maxRetries: 0,
+      callbacks: { onFlushError },
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(onFlushError).toHaveBeenCalledWith(expect.any(Error), 'CreateTrace');
+  });
+
+  it('should swallow errors from callbacks', async () => {
+    const badCallback = jest.fn().mockImplementation(() => { throw new Error('callback error'); });
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'bad-callback-test',
+      includeUserMeta: false,
+      callbacks: { onCreated: badCallback },
+    });
+    trace.flush();
+    // Should not throw
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(badCallback).toHaveBeenCalled();
+  });
+});
+
+describe('flush() returns Promise', () => {
+  let mockCreateTrace: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    mockCreateTrace = jest.fn().mockResolvedValue({
+      getStatus: () => successStatus,
+      getTraceId: () => 'trace-promise',
+    });
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: mockCreateTrace,
+      updateTrace: jest.fn().mockResolvedValue({
+        getStatus: () => successStatus,
+      }),
+      keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+    }));
+  });
+
+  it('should return a promise that resolves after flush completes', async () => {
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'promise-test',
+      includeUserMeta: false,
+    });
+    trace.addAttribute('key', 'value');
+
+    await trace.flush();
+
+    expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+    expect(trace.getTraceId()).toBe('trace-promise');
+  });
+
+  it('should return resolved promise when nothing to flush', async () => {
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'empty-flush-test',
+      includeUserMeta: false,
+    });
+    // First flush creates the trace
+    await trace.flush();
+    // Second flush with nothing pending
+    const result = trace.flush();
+    expect(result).toBeInstanceOf(Promise);
+    await result;
+  });
+});
+
+describe('Configurable logging', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: jest.fn().mockResolvedValue({
+        getStatus: () => successStatus,
+        getTraceId: () => 'trace-log',
+      }),
+      updateTrace: jest.fn().mockResolvedValue({ getStatus: () => successStatus }),
+      keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+    }));
+  });
+
+  it('should use noop logger by default (no console output)', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const client = new Client('test-key');
+    const trace = client.trace({ name: 'silent-test' });
+    await trace.close();
+
+    // The "already closed" warning should NOT appear in console
+    trace.addAttribute('ignored', 'value');
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('should use console logger when debug: true', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const client = new Client('test-key', { debug: true });
+    const trace = client.trace({ name: 'debug-test' });
+    await trace.close();
+    trace.addAttribute('ignored', 'value');
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[MiradorTrace] Trace is closed'));
+    warnSpy.mockRestore();
+  });
+
+  it('should use custom logger when provided', async () => {
+    const customLogger = { debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+    const client = new Client('test-key', { logger: customLogger });
+    const trace = client.trace({ name: 'custom-logger-test' });
+    await trace.close();
+    trace.addAttribute('ignored', 'value');
+
+    expect(customLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[MiradorTrace] Trace is closed'));
+  });
+});
+
+describe('maxTraceLifetimeMs dedicated timer', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: jest.fn().mockResolvedValue({
+        getStatus: () => successStatus,
+        getTraceId: () => 'trace-lifetime',
+      }),
+      updateTrace: jest.fn().mockResolvedValue({ getStatus: () => successStatus }),
+      keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+    }));
+  });
+
+  it('should auto-close after maxTraceLifetimeMs even without keepAlive', async () => {
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'lifetime-no-keepalive',
+      includeUserMeta: false,
+      autoKeepAlive: false,
+      maxTraceLifetimeMs: 100,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(trace.isClosed()).toBe(false);
+
+    await new Promise(r => setTimeout(r, 100));
+    expect(trace.isClosed()).toBe(true);
+  });
+
+  it('should not fire lifetime timer when maxTraceLifetimeMs is 0', async () => {
+    const client = new Client('test-key');
+    const trace = client.trace({
+      name: 'no-lifetime-timer',
+      includeUserMeta: false,
+      autoKeepAlive: false,
+    });
+    trace.flush();
+    await new Promise(r => setTimeout(r, 200));
+
+    expect(trace.isClosed()).toBe(false);
+    await trace.close();
+  });
+});
+
+describe('Sampling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const successStatus = new ResponseStatus();
+    successStatus.setCode(ResponseStatus.StatusCode.STATUS_CODE_SUCCESS);
+
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      createTrace: jest.fn().mockResolvedValue({
+        getStatus: () => successStatus,
+        getTraceId: () => 'trace-sampled',
+      }),
+      updateTrace: jest.fn().mockResolvedValue({ getStatus: () => successStatus }),
+      keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+      closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
+    }));
+  });
+
+  it('should return NoopTrace when sampleRate is 0', () => {
+    const client = new Client('test-key', { sampleRate: 0 });
+    const trace = client.trace({ name: 'sampled-out' });
+
+    expect(trace).toBeInstanceOf(NoopTrace);
+    expect(trace.getTraceId()).toBeNull();
+    expect(trace.isClosed()).toBe(true);
+
+    // Methods should be no-ops (no errors)
+    trace.addAttribute('key', 'value');
+    trace.addEvent('event', 'details');
+    trace.addTxHint('0xhash', 'ethereum');
+  });
+
+  it('should return real Trace when sampleRate is 1', () => {
+    const client = new Client('test-key', { sampleRate: 1 });
+    const trace = client.trace({ name: 'sampled-in' });
+
+    expect(trace).toBeInstanceOf(Trace);
+    expect(trace.isClosed()).toBe(false);
+    trace.close();
+  });
+
+  it('should use custom sampler function', () => {
+    const sampler = jest.fn().mockReturnValue(false);
+    const client = new Client('test-key', { sampler });
+    const trace = client.trace({ name: 'custom-sampled' });
+
+    expect(sampler).toHaveBeenCalledWith(expect.objectContaining({ name: 'custom-sampled' }));
+    expect(trace.isClosed()).toBe(true);
+  });
+
+  it('should prefer sampler over sampleRate', () => {
+    const sampler = jest.fn().mockReturnValue(true);
+    const client = new Client('test-key', { sampleRate: 0, sampler });
+    const trace = client.trace({ name: 'sampler-override' });
+
+    // sampler returns true, so trace should be real despite sampleRate: 0
+    expect(trace.isClosed()).toBe(false);
+    trace.close();
+  });
+
+  it('NoopTrace flush() returns resolved promise', async () => {
+    const client = new Client('test-key', { sampleRate: 0 });
+    const trace = client.trace({ name: 'noop-flush' });
+
+    const result = trace.flush();
+    expect(result).toBeInstanceOf(Promise);
+    await result; // should not throw
+  });
+
+  it('NoopTrace close() returns resolved promise', async () => {
+    const client = new Client('test-key', { sampleRate: 0 });
+    const trace = client.trace({ name: 'noop-close' });
+
+    await trace.close(); // should not throw
   });
 });
