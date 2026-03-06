@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0](https://github.com/miradorlabs/web-sdk/compare/v1.4.0...v1.5.0) (2026-03-06)
+
+
+### Features
+
+* add autoKeepAlive option to prevent zombie timers on resumed traces ([0d8c7a2](https://github.com/miradorlabs/web-sdk/commit/0d8c7a23c153cf83c626b94ceeefc2473252d85a))
+* add keepAlive option to prevent zombie timers on resumed traces ([caf1d77](https://github.com/miradorlabs/web-sdk/commit/caf1d7730309027fae2d38f9ff15edf84d270c0b))
+
 ## [1.4.0](https://github.com/miradorlabs/web-sdk/compare/v1.3.0...v1.4.0) (2026-03-04)
 
 
