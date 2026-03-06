@@ -1184,6 +1184,202 @@ describe('Trace', () => {
         expect(trace.getTraceId()).toBe('trace-456');
       });
     });
+
+    describe('zombie keepalive scenario (customer-reported)', () => {
+      /**
+       * Customer scenario: Frontend creates a trace and owns it. Backend grabs
+       * the frontend's traceId (e.g., via HTTP header) just to tag an event.
+       * Previously, the backend's flush() would start a keepalive timer that
+       * could never be stopped without calling close() — but close() is wrong
+       * because the frontend owns the trace. This caused "zombie keepalive"
+       * timers that ran indefinitely.
+       *
+       * The fix: when resuming a trace via traceId, keepalive defaults to false.
+       */
+
+      it('frontend-owned trace keeps keepalive; backend fire-and-forget does not', async () => {
+        // --- Frontend SDK instance: creates a new trace (is the owner) ---
+        const frontendClient = new Client('frontend-api-key');
+        const frontendTrace = frontendClient.trace({ name: 'UserSwap', includeUserMeta: false });
+        frontendTrace.addAttribute('wallet', '0xabc');
+        frontendTrace.flush();
+
+        // Wait for CreateTrace to complete and keepalive to tick
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const frontendResults = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const frontendMock = frontendResults[frontendResults.length - 1].value;
+        expect(frontendMock.keepAlive).toHaveBeenCalled();
+
+        // --- Backend SDK instance: resumes the trace just to tag an event ---
+        const frontendTraceId = frontendTrace.getTraceId()!;
+        expect(frontendTraceId).toBe('trace-456');
+
+        const backendClient = new Client('backend-api-key');
+        const backendTrace = backendClient.trace({
+          name: 'BackendTag',
+          traceId: frontendTraceId,
+          includeUserMeta: false,
+        });
+
+        // Backend adds an event and flushes — fire-and-forget style
+        backendTrace.addEvent('backend:enriched', 'added risk score');
+        backendTrace.flush();
+
+        // Advance time well past the keepalive interval
+        await jest.advanceTimersByTimeAsync(30000);
+
+        // Backend instance should NOT have started keepalive
+        const backendResults = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const backendMock = backendResults[backendResults.length - 1].value;
+        expect(backendMock.keepAlive).not.toHaveBeenCalled();
+
+        // Backend trace should NOT be closed (frontend owns the lifecycle)
+        expect(backendTrace.isClosed()).toBe(false);
+
+        // Frontend keepalive should still be running
+        frontendMock.keepAlive.mockClear();
+        await jest.advanceTimersByTimeAsync(15000);
+        expect(frontendMock.keepAlive).toHaveBeenCalled();
+      });
+
+      it('backend fire-and-forget update does not require close() to clean up', async () => {
+        // Simulate backend grabbing a frontend traceId to tag a single event
+        const backendClient = new Client('backend-api-key');
+        const backendTrace = backendClient.trace({
+          traceId: 'frontend-trace-abc',
+          includeUserMeta: false,
+        });
+
+        backendTrace.addEvent('risk:check', 'score=0.3');
+        backendTrace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        // Verify the update was sent
+        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+        const request = mockUpdateTrace.mock.calls[0][0];
+        expect(request.getTraceId()).toBe('frontend-trace-abc');
+
+        // Let 60 seconds pass — no zombie keepalive should fire
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        mockInstance.keepAlive.mockClear();
+        await jest.advanceTimersByTimeAsync(60000);
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+
+        // The trace can be garbage collected — no close() needed
+        // (no timers holding a reference)
+        expect(backendTrace.isClosed()).toBe(false);
+      });
+
+      it('backend can opt into keepalive with keepAlive: true if it takes ownership', async () => {
+        // Edge case: backend explicitly wants keepalive (e.g., it becomes the new owner)
+        const backendClient = new Client('backend-api-key');
+        const backendTrace = backendClient.trace({
+          traceId: 'frontend-trace-abc',
+          keepAlive: true,
+          includeUserMeta: false,
+        });
+
+        backendTrace.addEvent('ownership:transferred');
+        backendTrace.flush();
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).toHaveBeenCalled();
+
+        // Backend can now cleanly close when done
+        await backendTrace.close('backend done');
+        mockInstance.keepAlive.mockClear();
+        await jest.advanceTimersByTimeAsync(15000);
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('keepAlive option', () => {
+      it('should NOT start keep-alive when traceId is provided (default behavior)', async () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+      });
+
+      it('should start keep-alive for new traces (default behavior)', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).toHaveBeenCalled();
+      });
+
+      it('should start keep-alive when keepAlive: true overrides traceId default', async () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', keepAlive: true, includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).toHaveBeenCalled();
+      });
+
+      it('should NOT start keep-alive when keepAlive: false suppresses it for new trace', async () => {
+        const trace = client.trace({ name: 'TestTrace', keepAlive: false, includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+
+        await jest.advanceTimersByTimeAsync(15000);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+      });
+
+      it('should allow manual startKeepAlive() on a resumed trace', async () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'external-id', includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        // Keepalive should not be running
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+
+        // Manually start keepalive
+        trace.startKeepAlive();
+        await jest.advanceTimersByTimeAsync(15000);
+        expect(mockInstance.keepAlive).toHaveBeenCalled();
+      });
+
+      it('should allow manual stopKeepAlive() on a new trace', async () => {
+        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+        trace.addAttribute('key', 'value');
+        trace.flush();
+        await jest.advanceTimersByTimeAsync(0);
+
+        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
+        const mockInstance = results[results.length - 1].value;
+
+        // Keepalive should have started
+        trace.stopKeepAlive();
+        mockInstance.keepAlive.mockClear();
+
+        await jest.advanceTimersByTimeAsync(15000);
+        expect(mockInstance.keepAlive).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('provider configuration', () => {
