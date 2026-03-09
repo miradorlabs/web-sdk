@@ -19,7 +19,7 @@ npm install @miradorlabs/web-sdk
 - **TypeScript Support** - Full type definitions included
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
-- **Safe Multisig Tracking** - Track Safe message confirmations with `addSafeMsgHint()`
+- **Safe Multisig Tracking** - Track Safe message and transaction confirmations with `addSafeMsgHint()` and `addSafeTxHint()`
 
 ## Quick Start (Default)
 
@@ -32,15 +32,15 @@ const trace = client.trace({ name: 'SwapExecution' })
   .addAttribute('from', '0xabc...')
   .addTags(['dex', 'swap'])
   .addEvent('quote_received');
-// → CreateTrace sent after 50ms of inactivity
+// → FlushTrace sent after 50ms of inactivity
 
 trace.addEvent('transaction_signed')
      .addTxHint('0xtxhash...', 'ethereum');
-// → UpdateTrace sent after 50ms of inactivity
+// → FlushTrace sent after 50ms of inactivity
 
 // You can still call flush() explicitly to send immediately
 trace.addEvent('confirmed');
-trace.flush();  // → UpdateTrace sent immediately
+trace.flush();  // → FlushTrace sent immediately
 ```
 
 ## Manual Flush Mode
@@ -55,12 +55,12 @@ const trace = client.trace({ name: 'SwapExecution', })
   .addTags(['dex', 'swap'])
   .addEvent('quote_received');
 
-trace.flush();  // → CreateTrace
+trace.flush();  // → FlushTrace
 
 trace.addEvent('transaction_signed')
      .addTxHint('0xtxhash...', 'ethereum');
 
-trace.flush();  // → UpdateTrace
+trace.flush();  // → FlushTrace
 ```
 
 ## Keep-Alive & Trace Lifecycle
@@ -187,6 +187,8 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
 | `captureStackTrace` | `boolean` | `true` | Capture stack trace at trace creation point |
 
+> **Note:** A W3C-compatible trace ID (32 hex chars) is automatically generated when you call `client.trace()`. If you pass `traceId`, the trace resumes an existing trace instead.
+
 Returns: `Trace` builder instance
 
 ### Trace (Builder)
@@ -311,6 +313,21 @@ trace.addSafeMsgHint('0xmsgHash...', 'ethereum')
 | `chain` | `ChainName` | Chain name: `'ethereum'` \| `'polygon'` \| `'arbitrum'` \| `'base'` \| `'optimism'` \| `'bsc'` |
 | `details` | `string` | Optional details about the message |
 
+#### `addSafeTxHint(safeTxHash, chain, details?)`
+
+Add a Safe transaction hint for tracking Safe multisig transaction confirmations. Mirador will monitor the Safe contract for confirmation events related to the given Safe transaction hash.
+
+```typescript
+trace.addSafeTxHint('0xsafeTxHash...', 'ethereum')
+     .addSafeTxHint('0xotherHash...', 'base', 'Token transfer')
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `safeTxHash` | `string` | The Safe transaction hash to track |
+| `chain` | `ChainName` | Chain name: `'ethereum'` \| `'polygon'` \| `'arbitrum'` \| `'base'` \| `'optimism'` \| `'bsc'` |
+| `details` | `string` | Optional details about the transaction |
+
 #### `addTxInputData(inputData)`
 
 Add transaction input data (calldata) as a trace event. This is the hex-encoded data field from a transaction, useful for debugging failed transactions where the calldata is still available even though the transaction reverted.
@@ -329,8 +346,7 @@ Returns: `this` for chaining
 
 Flush pending data to the gateway. Fire-and-forget - returns immediately but maintains strict ordering.
 
-- First flush calls `CreateTrace`
-- Subsequent flushes call `UpdateTrace`
+Each flush sends `FlushTrace` (an idempotent create-or-update RPC).
 
 ```typescript
 trace.flush();
@@ -340,30 +356,13 @@ Returns: `void`
 
 #### `getTraceId()`
 
-Get the trace ID (available after first flush completes).
+Get the trace ID. Always available immediately since trace IDs are generated at `client.trace()` time.
 
 ```typescript
-const traceId = trace.getTraceId();  // string | null
+const traceId = trace.getTraceId();  // string
 ```
 
-#### `setTraceId(traceId)`
-
-Set the trace ID on an existing trace instance, allowing it to resume a trace created elsewhere (e.g., passed from a backend SDK via HTTP header). Subsequent flushes will send `UpdateTrace` instead of `CreateTrace`.
-
-```typescript
-trace.setTraceId('abc-123-def');
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `traceId` | `string` | The trace ID to resume |
-
-Returns: `this` for chaining
-
-**Notes:**
-- Ignored if the trace is already closed (logs a warning)
-- Ignored if a trace ID is already set (logs a warning)
-- Can also be set at creation time via `client.trace({ traceId: '...' })`
+Returns: `string`
 
 #### `close(reason?)`
 
@@ -381,7 +380,7 @@ await trace.close('User completed workflow');
 Returns: `Promise<void>`
 
 **Important:** Once a trace is closed:
-- All method calls (`addAttribute`, `addEvent`, `addTag`, `addTxHint`, `addSafeMsgHint`, `flush`) will be ignored with a warning
+- All method calls (`addAttribute`, `addEvent`, `addTag`, `addTxHint`, `addSafeMsgHint`, `addSafeTxHint`, `flush`) will be ignored with a warning
 - The keep-alive timer will be stopped
 - A close request will be sent to the server
 
@@ -410,7 +409,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
     .addAttribute('value', amount)
     .addTags(['transaction', 'send', 'ethereum'])
     .addEvent('wallet_connected', { wallet: 'MetaMask' });
-  // → CreateTrace sent automatically
+  // → FlushTrace sent automatically
   // → Keep-alive timer starts automatically
 
   trace.addEvent('user_signed');
@@ -420,7 +419,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
 
     trace.addEvent('transaction_sent', { txHash: receipt.hash })
          .addTxHint(receipt.hash, 'ethereum');
-    // → UpdateTrace sent automatically
+    // → FlushTrace sent automatically
 
     // Close the trace when done
     await trace.close('Transaction completed successfully');
@@ -477,7 +476,7 @@ You can share a trace ID between the web SDK and the Node.js SDK to create a uni
 
 ### Frontend → Backend
 
-Pass the trace ID from the browser to your backend via an HTTP header:
+Pass the trace ID from the browser to your backend via an HTTP header. Trace IDs are available immediately since they're generated at `client.trace()` time:
 
 ```typescript
 import { Client } from '@miradorlabs/web-sdk';
@@ -487,15 +486,12 @@ const trace = client.trace({ name: 'Checkout' })
   .addAttribute('user', '0xabc...')
   .addEvent('checkout_started');
 
-// Wait for the trace to be created so we have a trace ID
-// (or use a short delay / poll getTraceId())
-await new Promise(resolve => setTimeout(resolve, 100));
-
+// Trace ID is available immediately — no need to wait for flush
 const traceId = trace.getTraceId();
 
 // Pass trace ID to your backend
 const response = await fetch('/api/process-order', {
-  headers: { 'x-mirador-trace-id': traceId! },
+  headers: { 'x-mirador-trace-id': traceId },
 });
 ```
 
@@ -509,11 +505,12 @@ const client = new Client('your-api-key');
 app.post('/api/process-order', async (req, res) => {
   const traceId = req.headers['x-mirador-trace-id'];
 
+  // Resume the trace — FlushTrace is idempotent, so this adds to the existing trace
   const trace = client.trace({ name: 'ProcessOrder', traceId })
     .addAttribute('step', 'backend')
     .addEvent('order_processing');
+  // → auto-flushed via FlushTrace
 
-  await trace.create(); // Sends UpdateTrace (not CreateTrace)
   // ...
   await trace.close('Order processed');
 });
@@ -527,12 +524,8 @@ Pass a trace ID from your backend to the browser and resume it:
 // Backend creates the trace and returns the ID
 const traceId = await getTraceIdFromBackend();
 
-// Option 1: Pass at creation time
+// Resume trace by passing traceId at creation time
 const trace = client.trace({ name: 'Dashboard', traceId });
-
-// Option 2: Set after creation
-const trace = client.trace({ name: 'Dashboard' });
-trace.setTraceId(traceId);
 ```
 
 ## Automatic Client Metadata Collection
@@ -610,6 +603,8 @@ import {
   StackFrame,        // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,        // { frames: StackFrame[], raw: string }
   ChainName,         // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
+  SafeTxHintData,    // { safeTxHash, chain, details?, timestamp }
+  SafeMsgHintData,   // { messageHash, chain, details?, timestamp }
 } from '@miradorlabs/web-sdk';
 ```
 
@@ -664,7 +659,7 @@ A complete working example is available in the [`example/`](./example/) director
 - Creating and managing traces
 - Adding attributes, tags, and events
 - Blockchain transaction correlation with `addTxHint()`
-- Safe multisig message tracking with `addSafeMsgHint()` (optional, commented example)
+- Safe multisig tracking with `addSafeMsgHint()` and `addSafeTxHint()` (optional, commented example)
 - Network switching and balance display
 
 To run the example:
