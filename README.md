@@ -185,7 +185,7 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
 | `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
 | `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
-| `captureStackTrace` | `boolean` | `true` | Capture stack trace at trace creation point |
+
 
 > **Note:** A W3C-compatible trace ID (32 hex chars) is automatically generated when you call `client.trace()`. If you pass `traceId`, the trace resumes an existing trace instead.
 
