@@ -14,6 +14,9 @@ export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from '.
 // Chain utilities
 export { chainIdToName } from './chains';
 
+// Trace ID utilities
+export { generateTraceId } from './trace-id';
+
 // Types
 export type {
   ClientOptions,

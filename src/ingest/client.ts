@@ -9,16 +9,8 @@ import {
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { Trace } from './trace';
+import { generateTraceId } from './trace-id';
 import type { ClientOptions, TraceOptions } from './types';
-
-/**
- * Generate a W3C-compatible trace ID (32 lowercase hex chars / 128 bits)
- */
-function generateTraceId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-}
 
 // Default configuration values
 const DEFAULT_API_URL = 'https://ingest.mirador.org:443';
