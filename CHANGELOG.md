@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/miradorlabs/web-sdk/compare/v1.5.0...v1.6.0) (2026-03-10)
+
+
+### Features
+
+* add addSafeTxHint for Safe multisig transaction tracking ([4d41aa7](https://github.com/miradorlabs/web-sdk/commit/4d41aa72af520c4c8f6b05b93df75c735ac977cf))
+* add addSafeTxHint method for Safe multisig transaction tracking ([57c5294](https://github.com/miradorlabs/web-sdk/commit/57c52948a2f78ceb30a7c6befab8420aaa4b6d01))
+
 ## [1.5.0](https://github.com/miradorlabs/web-sdk/compare/v1.4.0...v1.5.0) (2026-03-06)
 
 
