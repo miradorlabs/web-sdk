@@ -22,6 +22,6 @@ export type {
 
 // Re-export proto types for convenience
 export {
-  CreateTraceRequest,
-  CreateTraceResponse,
+  FlushTraceRequest,
+  FlushTraceResponse,
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
