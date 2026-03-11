@@ -878,22 +878,6 @@ export class Trace {
     return this.traceId;
   }
 
-  /**
-   * Set the trace ID, allowing this trace to resume one created elsewhere
-   * (e.g., passed from a backend SDK via HTTP header).
-   *
-   * @deprecated Pass `traceId` to `client.trace({ traceId })` instead.
-   * @param traceId The trace ID to resume
-   * @returns this for chaining
-   */
-  setTraceId(traceId: string): this {
-    if (this.closed) {
-      console.warn('[MiradorTrace] Trace is closed. Ignoring setTraceId call.');
-      return this;
-    }
-    this.traceId = traceId;
-    return this;
-  }
 
   /**
    * Check if the trace is closed
