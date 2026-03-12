@@ -155,10 +155,12 @@ export class Trace {
 
   // Trace abandonment
   private abandoned: boolean = false;
+  // Set during close() to skip rate-limit waits in enqueueFlush
+  private closing: boolean = false;
 
   // State tracking
   private traceId: string;
-  private closed: boolean = false;
+  protected closed: boolean = false;
   private flushedOnce: boolean = false;
   private pendingAttributes: { [key: string]: string } = {};
   private pendingTags: string[] = [];
@@ -758,12 +760,14 @@ export class Trace {
     this.flushQueue = this.flushQueue.then(async () => {
       if (this.abandoned) return;
 
-      // Rate limit check: if rate-limited, wait until the window passes
-      const now = Date.now();
-      if (this.client.rateLimitedUntil > now) {
-        const waitMs = this.client.rateLimitedUntil - now;
-        this.client.logger.warn(`[MiradorTrace] Rate limited, waiting ${waitMs}ms`);
-        await this.sleep(waitMs);
+      // Rate limit check: if rate-limited, wait unless we're closing (to avoid exceeding close timeout)
+      if (!this.closing) {
+        const now = Date.now();
+        if (this.client.rateLimitedUntil > now) {
+          const waitMs = this.client.rateLimitedUntil - now;
+          this.client.logger.warn(`[MiradorTrace] Rate limited, waiting ${waitMs}ms`);
+          await this.sleep(waitMs);
+        }
       }
 
       await this.flushTrace(traceData);
@@ -909,10 +913,12 @@ export class Trace {
       } catch (err) {
         lastError = err as Error;
 
-        // Detect rate limiting (RESOURCE_EXHAUSTED) and set client-wide backoff
+        // Detect rate limiting (RESOURCE_EXHAUSTED) and set client-wide backoff.
+        // Don't retry here — enqueueFlush already waits out the rate-limit window.
         const code = (err as { code?: number }).code;
         if (code === 8) {
           this.client.rateLimitedUntil = Date.now() + 30_000;
+          break;
         }
 
         if (!this.isRetryableError(err)) {
@@ -1085,6 +1091,9 @@ export class Trace {
       return;
     }
 
+    // Signal closing so enqueueFlush skips rate-limit waits
+    this.closing = true;
+
     // Flush any pending data before marking closed
     this.flush();
 
@@ -1184,7 +1193,7 @@ export class NoopTrace extends Trace {
       maxTraceLifetimeMs: 0,
     });
     // Immediately close to prevent any timers or network calls
-    (this as unknown as { closed: boolean }).closed = true;
+    this.closed = true;
   }
 
   // Override all public methods to be no-ops
@@ -1203,6 +1212,7 @@ export class NoopTrace extends Trace {
   setProvider(): this { return this; }
   flush(): void {}
   async close(): Promise<void> {}
+  /** Sentinel trace ID — not a valid trace, used only for NoopTrace */
   getTraceId(): string { return '0'.repeat(32); }
   isClosed(): boolean { return true; }
   startKeepAlive(): void {}

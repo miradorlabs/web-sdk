@@ -69,11 +69,14 @@ export class Client {
   constructor(apiKey: string, options?: ClientOptions) {
     this.apiKey = apiKey;
     this.apiUrl = options?.apiUrl || DEFAULT_API_URL;
-    this.keepAliveIntervalMs = options?.keepAliveIntervalMs || DEFAULT_KEEP_ALIVE_INTERVAL_MS;
+    this.keepAliveIntervalMs = options?.keepAliveIntervalMs ?? DEFAULT_KEEP_ALIVE_INTERVAL_MS;
     this.callTimeoutMs = options?.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
     this.provider = options?.provider;
     this.callbacks = options?.callbacks;
     this.sampleRate = options?.sampleRate ?? 1;
+    if (this.sampleRate < 0 || this.sampleRate > 1) {
+      throw new Error('sampleRate must be between 0 and 1');
+    }
     this.sampler = options?.sampler;
 
     // Configure logger: custom > debug console > noop
