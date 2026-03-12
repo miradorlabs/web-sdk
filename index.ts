@@ -1,8 +1,11 @@
 // Core SDK exports
-export { Client, Trace, NoopTrace } from './src/ingest';
+export { Client, Trace, NoopTrace, MiradorProvider } from './src/ingest';
 
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
+
+// Chain utilities
+export { chainIdToName } from './src/ingest';
 
 // Metadata utilities
 export { getClientMetadata, detectBrowser, detectOS, detectDeviceType } from './src/ingest';
