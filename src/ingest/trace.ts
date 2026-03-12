@@ -2,10 +2,8 @@
  * Mirador Trace builder class for constructing traces with method chaining
  */
 import {
-  CreateTraceRequest,
-  CreateTraceResponse,
-  UpdateTraceRequest,
-  UpdateTraceResponse,
+  FlushTraceRequest,
+  FlushTraceResponse,
   TraceData,
   Attributes,
   Tags,
@@ -43,8 +41,7 @@ const CHAIN_MAP: Record<ChainName, Chain> = {
  * @internal
  */
 export interface TraceSubmitter {
-  _sendTrace(request: CreateTraceRequest): Promise<CreateTraceResponse>;
-  _updateTrace(request: UpdateTraceRequest): Promise<UpdateTraceResponse>;
+  _flushTrace(request: FlushTraceRequest): Promise<FlushTraceResponse>;
   _keepAlive(request: KeepAliveRequest): Promise<KeepAliveResponse>;
   _closeTrace(request: CloseTraceRequest): Promise<CloseTraceResponse>;
 }
@@ -52,7 +49,7 @@ export interface TraceSubmitter {
 /** Options passed to MiradorTrace constructor (with defaults applied) */
 interface ResolvedTraceOptions {
   name?: string;
-  traceId?: string;
+  traceId: string;
   includeUserMeta: boolean;
   maxRetries: number;
   retryBackoff: number;
@@ -121,8 +118,9 @@ export class Trace {
   private retryBackoff: number;
 
   // State tracking
-  private traceId: string | null = null;
+  private traceId: string;
   private closed: boolean = false;
+  private flushedOnce: boolean = false;
   private pendingAttributes: { [key: string]: string } = {};
   private pendingTags: string[] = [];
   private pendingEvents: TraceEvent[] = [];
@@ -142,7 +140,7 @@ export class Trace {
   constructor(client: TraceSubmitter, options: ResolvedTraceOptions) {
     this.client = client;
     this.name = options.name;
-    this.traceId = options.traceId ?? null;
+    this.traceId = options.traceId;
     this.includeUserMeta = options.includeUserMeta;
     this.maxRetries = options.maxRetries;
     this.retryBackoff = options.retryBackoff;
@@ -601,32 +599,23 @@ export class Trace {
       this.pendingSafeMsgHints.length > 0 ||
       this.pendingSafeTxHints.length > 0;
 
-    if (!hasPendingData && this.traceId !== null) {
+    if (!hasPendingData) {
       return; // Nothing to flush
     }
 
     // Capture pending data NOW (before it changes)
     const traceData = this.buildTraceData();
-
-    // Capture context for error reporting
-    const isCreateOp = this.traceId === null;
     const traceName = this.name;
 
     // Clear pending immediately so next flush doesn't re-send
     this.clearPending();
 
     // Chain onto the queue for strict ordering
-    // Check traceId inside the queue to ensure proper ordering
     this.flushQueue = this.flushQueue.then(async () => {
-      if (this.traceId === null) {
-        await this.createTrace(traceData);
-      } else {
-        await this.updateTrace(traceData);
-      }
+      await this.flushTrace(traceData);
     }).catch(err => {
-      const operation = isCreateOp ? 'CreateTrace' : 'UpdateTrace';
       const context = traceName ? ` (trace: ${traceName})` : '';
-      console.error(`[MiradorTrace] Flush error during ${operation}${context}:`, err);
+      console.error(`[MiradorTrace] Flush error during FlushTrace${context}:`, err);
     });
   }
 
@@ -638,7 +627,7 @@ export class Trace {
 
     // Add pending attributes (+ user metadata on first flush)
     const allAttrs = { ...this.pendingAttributes };
-    if (this.traceId === null && this.includeUserMeta) {
+    if (!this.flushedOnce && this.includeUserMeta) {
       const clientMeta = getClientMetadata();
       for (const [key, value] of Object.entries(clientMeta)) {
         allAttrs[`user.${key}`] = value;
@@ -754,10 +743,11 @@ export class Trace {
   }
 
   /**
-   * Send CreateTrace request
+   * Send FlushTrace request (idempotent create-or-update)
    */
-  private async createTrace(traceData: TraceData): Promise<void> {
-    const request = new CreateTraceRequest();
+  private async flushTrace(traceData: TraceData): Promise<void> {
+    const request = new FlushTraceRequest();
+    request.setTraceId(this.traceId);
     if (this.name) {
       request.setName(this.name);
     }
@@ -765,43 +755,19 @@ export class Trace {
 
     try {
       const response = await this.retryWithBackoff(
-        () => this.client._sendTrace(request),
-        'CreateTrace'
+        () => this.client._flushTrace(request),
+        'FlushTrace'
       );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        this.traceId = response.getTraceId();
+        this.flushedOnce = true;
         if (this.autoKeepAlive) {
           this.startKeepAlive();
         }
       } else {
-        console.error('[MiradorTrace] CreateTrace failed:', response.getStatus()?.getErrorMessage());
+        console.error('[MiradorTrace] FlushTrace failed:', response.getStatus()?.getErrorMessage());
       }
     } catch (err) {
-      console.error('[MiradorTrace] CreateTrace error after retries:', err);
-    }
-  }
-
-  /**
-   * Send UpdateTrace request
-   */
-  private async updateTrace(traceData: TraceData): Promise<void> {
-    const request = new UpdateTraceRequest();
-    request.setTraceId(this.traceId!);
-    request.setData(traceData);
-
-    try {
-      const response = await this.retryWithBackoff(
-        () => this.client._updateTrace(request),
-        'UpdateTrace'
-      );
-      if (response.getStatus()?.getCode() !== ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
-        console.error('[MiradorTrace] UpdateTrace failed:', response.getStatus()?.getErrorMessage());
-      } else if (this.autoKeepAlive) {
-        // Start keep-alive if not already running (e.g., first update for a resumed trace)
-        this.startKeepAlive();
-      }
-    } catch (err) {
-      console.error('[MiradorTrace] UpdateTrace error after retries:', err);
+      console.error('[MiradorTrace] FlushTrace error after retries:', err);
     }
   }
 
@@ -905,32 +871,13 @@ export class Trace {
   }
 
   /**
-   * Get the trace ID (available after first flush completes)
-   * @returns The trace ID or null if not yet created
+   * Get the trace ID
+   * @returns The trace ID
    */
-  getTraceId(): string | null {
+  getTraceId(): string {
     return this.traceId;
   }
 
-  /**
-   * Set the trace ID on an existing trace instance, allowing it to resume
-   * a trace created elsewhere (e.g., passed from a backend SDK via HTTP header).
-   * Subsequent flushes will send UpdateTrace instead of CreateTrace.
-   * @param traceId The trace ID to resume
-   * @returns This trace builder for chaining
-   */
-  setTraceId(traceId: string): this {
-    if (this.closed) {
-      console.warn('[MiradorTrace] Trace is closed, ignoring setTraceId');
-      return this;
-    }
-    if (this.traceId !== null) {
-      console.warn('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
-      return this;
-    }
-    this.traceId = traceId;
-    return this;
-  }
 
   /**
    * Check if the trace is closed

@@ -2,8 +2,7 @@
  * Client - Main client for interacting with the Mirador Ingest Gateway
  */
 import {
-  CreateTraceRequest,
-  UpdateTraceRequest,
+  FlushTraceRequest,
   KeepAliveRequest,
   CloseTraceRequest,
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
@@ -11,6 +10,15 @@ import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { Trace } from './trace';
 import type { ClientOptions, TraceOptions } from './types';
+
+/**
+ * Generate a W3C-compatible trace ID (32 lowercase hex chars / 128 bits)
+ */
+function generateTraceId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // Default configuration values
 const DEFAULT_API_URL = 'https://ingest.mirador.org:443';
@@ -46,21 +54,12 @@ export class Client {
   }
 
   /** @internal */
-  async _sendTrace(request: CreateTraceRequest) {
+  async _flushTrace(request: FlushTraceRequest) {
     const metadata = { 'x-ingest-api-key': this.apiKey };
     const timestamp = new Timestamp();
     timestamp.fromDate(new Date());
     request.setSendClientTimestamp(timestamp);
-    return await this.client.createTrace(request, metadata);
-  }
-
-  /** @internal */
-  async _updateTrace(request: UpdateTraceRequest) {
-    const metadata = { 'x-ingest-api-key': this.apiKey };
-    const timestamp = new Timestamp();
-    timestamp.fromDate(new Date());
-    request.setSendClientTimestamp(timestamp);
-    return await this.client.updateTrace(request, metadata);
+    return await this.client.flushTrace(request, metadata);
   }
 
   /** @internal */
@@ -82,9 +81,12 @@ export class Client {
    * @returns A Trace builder instance
    */
   trace(options?: TraceOptions): Trace {
+    // Generate a W3C trace ID (32 hex chars) if not provided
+    const traceId = options?.traceId ?? generateTraceId();
+
     return new Trace(this, {
       name: options?.name,
-      traceId: options?.traceId,
+      traceId,
       includeUserMeta: options?.includeUserMeta ?? DEFAULT_INCLUDE_USER_META,
       maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryBackoff: options?.retryBackoff ?? DEFAULT_RETRY_BACKOFF,

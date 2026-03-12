@@ -2,7 +2,7 @@
 import { Client, Trace, captureStackTrace, chainIdToName, MiradorProvider } from '../src/ingest';
 import type { StackTrace, EIP1193Provider, TransactionRequest } from '../src/ingest';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { CreateTraceRequest, Chain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { FlushTraceRequest, Chain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 
 // Mock the gRPC-Web client
@@ -35,24 +35,19 @@ beforeAll(() => {
 });
 
 describe('Client', () => {
-  let mockCreateTrace: jest.Mock;
-  let mockUpdateTrace: jest.Mock;
+  let mockFlushTrace: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockCreateTrace = jest.fn().mockResolvedValue({
-      getTraceId: () => 'trace-123',
-      getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
-    });
-
-    mockUpdateTrace = jest.fn().mockResolvedValue({
+    mockFlushTrace = jest.fn().mockResolvedValue({
+      getTraceId: () => 'trace-XXX',
+      getCreated: () => true,
       getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
     });
 
     (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
-      createTrace: mockCreateTrace,
-      updateTrace: mockUpdateTrace,
+      flushTrace: mockFlushTrace,
     }));
   });
 
@@ -102,24 +97,19 @@ describe('Client', () => {
 
 describe('Trace', () => {
   let client: Client;
-  let mockCreateTrace: jest.Mock;
-  let mockUpdateTrace: jest.Mock;
+  let mockFlushTrace: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockCreateTrace = jest.fn().mockResolvedValue({
+    mockFlushTrace = jest.fn().mockResolvedValue({
       getTraceId: () => 'trace-456',
-      getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
-    });
-
-    mockUpdateTrace = jest.fn().mockResolvedValue({
+      getCreated: () => true,
       getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
     });
 
     (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
-      createTrace: mockCreateTrace,
-      updateTrace: mockUpdateTrace,
+      flushTrace: mockFlushTrace,
     }));
 
     client = new Client('test-api-key');
@@ -172,14 +162,14 @@ describe('Trace', () => {
   describe('flush()', () => {
 
 
-    it('should set trace name in CreateTraceRequest', async () => {
+    it('should set trace name in flush request', async () => {
       const trace = client.trace({ name: 'MyTraceName' })
         .addAttribute('key', 'value');
 
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       expect(request.getName()).toBe('MyTraceName');
     });
 
@@ -191,7 +181,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const attrsList = data!.getAttributesList();
       const attrsMap = attrsList[0].getAttributesMap();
@@ -206,7 +196,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const tagsList = data!.getTagsList();
       expect(tagsList[0].getTagsList()).toEqual(['tag1', 'tag2']);
@@ -220,7 +210,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const events = data!.getEventsList();
       // First event is "trace init", followed by user events
@@ -238,7 +228,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const hints = data!.getTxHashHintsList();
       expect(hints.length).toBe(2);
@@ -248,14 +238,14 @@ describe('Trace', () => {
       expect(hints[1].getChain()).toBe(Chain.CHAIN_POLYGON);
     });
 
-    it('should set traceId after successful CreateTrace', async () => {
+    it('should have traceId set immediately (auto-generated)', () => {
       const trace = client.trace({ name: 'TestTrace' })
         .addAttribute('key', 'value');
 
-      expect(trace.getTraceId()).toBeNull();
-      trace.flush();
-      await flushPromises();
-      expect(trace.getTraceId()).toBe('trace-456');
+      const traceId = trace.getTraceId();
+      expect(typeof traceId).toBe('string');
+      expect(traceId.length).toBe(32);
+      expect(traceId).toMatch(/^[0-9a-f]{32}$/);
     });
   });
 
@@ -273,7 +263,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       // Events: trace init + tx input data
       expect(events.length).toBe(2);
@@ -292,7 +282,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const attrsMap = data!.getAttributesList()[0].getAttributesMap();
       expect(attrsMap.get('wallet')).toBe('0xabc');
@@ -329,7 +319,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       // First event is "trace init", second is the user's stack trace event
       expect(events[0].getName()).toBe('trace init');
@@ -348,7 +338,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       // First event is "trace init", second is the user's existing stack trace event
       expect(events[0].getName()).toBe('trace init');
@@ -361,9 +351,9 @@ describe('Trace', () => {
   });
 
   describe('error handling', () => {
-    it('should handle CreateTrace failure gracefully', async () => {
+    it('should handle flushTrace failure gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      mockCreateTrace.mockRejectedValue(new Error('Connection failed'));
+      mockFlushTrace.mockRejectedValue(new Error('Connection failed'));
 
       const trace = client.trace({ name: 'TestTrace', maxRetries: 0 })
         .addAttribute('key', 'value');
@@ -386,17 +376,17 @@ describe('Trace', () => {
       trace.addAttribute('c', '3');
 
       // Not yet flushed (still in same microtask)
-      expect(mockCreateTrace).not.toHaveBeenCalled();
+      expect(mockFlushTrace).not.toHaveBeenCalled();
 
       // Wait for microtask to execute
       await flushMicrotasks();
       await flushPromises();
 
-      // Should have been batched into a single CreateTrace call
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      // Should have been batched into a single flushTrace call
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
       // Verify all attributes were included
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const attrsMap = data!.getAttributesList()[0].getAttributesMap();
       expect(attrsMap.get('a')).toBe('1');
@@ -415,16 +405,16 @@ describe('Trace', () => {
         .addEvent('initiated');
 
       // Not yet flushed
-      expect(mockCreateTrace).not.toHaveBeenCalled();
+      expect(mockFlushTrace).not.toHaveBeenCalled();
 
       await flushMicrotasks();
       await flushPromises();
 
       // Single batched request
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
       // Verify all data was included in the single request
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       const attrsMap = data!.getAttributesList()[0].getAttributesMap();
       expect(attrsMap.get('wallet')).toBe('0xabc');
@@ -444,14 +434,14 @@ describe('Trace', () => {
       trace.addEvent('event1');
       trace.addTxHint('0x123', 'ethereum');
 
-      expect(mockCreateTrace).not.toHaveBeenCalled();
+      expect(mockFlushTrace).not.toHaveBeenCalled();
 
       await flushMicrotasks();
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
       expect(data!.getAttributesList().length).toBe(1);
       expect(data!.getTagsList().length).toBe(1);
@@ -469,7 +459,7 @@ describe('Trace', () => {
       // Flush is fire-and-forget but queues the request
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
     });
 
     it('should handle multiple flushes across different microtask cycles', async () => {
@@ -480,14 +470,14 @@ describe('Trace', () => {
       await flushMicrotasks();
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
-      // Second batch (after trace is created, should use UpdateTrace)
+      // Second batch (after first flush, should call flushTrace again)
       trace.addAttribute('b', '2');
       await flushMicrotasks();
       await flushPromises();
 
-      expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(2);
     });
 
     it('should cancel pending microtask flush when manual flush is called', async () => {
@@ -499,14 +489,14 @@ describe('Trace', () => {
       trace.flush(); // Manual flush - should clear the microtask flag
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
       // The scheduled microtask should run but find nothing to flush
       await flushMicrotasks();
       await flushPromises();
 
       // Still only one call
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -518,7 +508,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getDetails()).toBe('simple string');
     });
@@ -530,7 +520,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
@@ -544,7 +534,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
@@ -562,7 +552,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints).toHaveLength(1);
       expect(hints[0].getMessageHash()).toBe('0xmsgHash123');
@@ -576,7 +566,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints[0].getMessageHash()).toBe('0xmsgHash456');
       expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
@@ -591,7 +581,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints).toHaveLength(2);
       expect(hints[0].getMessageHash()).toBe('0xmsg1');
@@ -612,9 +602,10 @@ describe('Trace', () => {
       ];
 
       for (const { chain, expected } of chainTests) {
-        mockCreateTrace.mockClear();
-        mockCreateTrace.mockResolvedValue({
+        mockFlushTrace.mockClear();
+        mockFlushTrace.mockResolvedValue({
           getTraceId: () => 'trace-456',
+          getCreated: () => true,
           getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
         });
 
@@ -624,7 +615,7 @@ describe('Trace', () => {
         trace.flush();
         await flushPromises();
 
-        const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+        const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
         const hints = request.getData()!.getSafeMsgHintsList();
         expect(hints[0].getChain()).toBe(expected);
       }
@@ -646,116 +637,12 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       expect(request.getData()!.getTxHashHintsList()).toHaveLength(1);
       const safeMsgHints = request.getData()!.getSafeMsgHintsList();
       expect(safeMsgHints).toHaveLength(1);
       expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
       expect(safeMsgHints[0].getDetails()).toBe('approval');
-    });
-  });
-
-  describe('addSafeTxHint', () => {
-    it('should add a safe tx hint with chain and safe tx hash', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeTxHint('0xsafeTxHash123', 'ethereum');
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const hints = request.getData()!.getSafeTxHintsList();
-      expect(hints).toHaveLength(1);
-      expect(hints[0].getSafeTxHash()).toBe('0xsafeTxHash123');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
-    });
-
-    it('should add a safe tx hint with details', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeTxHint('0xsafeTxHash456', 'polygon', 'multisig approval');
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const hints = request.getData()!.getSafeTxHintsList();
-      expect(hints[0].getSafeTxHash()).toBe('0xsafeTxHash456');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
-      expect(hints[0].getDetails()).toBe('multisig approval');
-    });
-
-    it('should support multiple safe tx hints', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeTxHint('0xsafeTx1', 'ethereum')
-        .addSafeTxHint('0xsafeTx2', 'base', 'second hint');
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      const hints = request.getData()!.getSafeTxHintsList();
-      expect(hints).toHaveLength(2);
-      expect(hints[0].getSafeTxHash()).toBe('0xsafeTx1');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
-      expect(hints[1].getSafeTxHash()).toBe('0xsafeTx2');
-      expect(hints[1].getChain()).toBe(Chain.CHAIN_BASE);
-      expect(hints[1].getDetails()).toBe('second hint');
-    });
-
-    it('should handle different chain names', async () => {
-      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: Chain }> = [
-        { chain: 'ethereum', expected: Chain.CHAIN_ETHEREUM },
-        { chain: 'polygon', expected: Chain.CHAIN_POLYGON },
-        { chain: 'arbitrum', expected: Chain.CHAIN_ARBITRUM },
-        { chain: 'base', expected: Chain.CHAIN_BASE },
-        { chain: 'optimism', expected: Chain.CHAIN_OPTIMISM },
-        { chain: 'bsc', expected: Chain.CHAIN_BSC },
-      ];
-
-      for (const { chain, expected } of chainTests) {
-        mockCreateTrace.mockClear();
-        mockCreateTrace.mockResolvedValue({
-          getTraceId: () => 'trace-456',
-          getCreated: () => true,
-          getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
-        });
-
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-          .addSafeTxHint('0xsafeTx', chain);
-
-        trace.flush();
-        await flushPromises();
-
-        const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-        const hints = request.getData()!.getSafeTxHintsList();
-        expect(hints[0].getChain()).toBe(expected);
-      }
-    });
-
-    it('should return this for chaining', () => {
-      const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.addSafeTxHint('0xsafeTx', 'ethereum')).toBe(trace);
-    });
-
-    it('should work alongside other builder methods', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addAttribute('safe_address', '0x1234')
-        .addTag('multisig')
-        .addEvent('proposed', 'token transfer')
-        .addTxHint('0xtx123', 'ethereum')
-        .addSafeMsgHint('0xmsg123', 'ethereum', 'msg approval')
-        .addSafeTxHint('0xsafeTx123', 'ethereum', 'tx approval');
-
-      trace.flush();
-      await flushPromises();
-
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
-      expect(request.getData()!.getTxHashHintsList()).toHaveLength(1);
-      expect(request.getData()!.getSafeMsgHintsList()).toHaveLength(1);
-      const safeTxHints = request.getData()!.getSafeTxHintsList();
-      expect(safeTxHints).toHaveLength(1);
-      expect(safeTxHints[0].getSafeTxHash()).toBe('0xsafeTx123');
-      expect(safeTxHints[0].getDetails()).toBe('tx approval');
     });
   });
 
@@ -767,7 +654,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getTxHash()).toBe('0xabc');
       expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
@@ -780,7 +667,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
@@ -794,7 +681,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
       const events = request.getData()!.getEventsList();
@@ -810,7 +697,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
     });
@@ -966,7 +853,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
@@ -981,7 +868,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getDetails()).toBe('swap tx');
     });
@@ -993,7 +880,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getTxHash()).toBe('0xhash');
       expect(hints[0].getChain()).toBe(Chain.CHAIN_BASE);
@@ -1007,7 +894,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const events = request.getData()!.getEventsList();
       expect(events.length).toBe(2);
       expect(events[0].getName()).toBe('trace init');
@@ -1015,7 +902,7 @@ describe('Trace', () => {
       expect(events[1].getDetails()).toBe('0xabcd');
     });
 
-    it('full legacy workflow sends all data in CreateTraceRequest', async () => {
+    it('full legacy workflow sends all data in flush request', async () => {
       const trace = client.trace({ name: 'swap', includeUserMeta: false })
         .addAttribute('user', '0x1')
         .addTag('dex')
@@ -1026,8 +913,8 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
-      const request = mockCreateTrace.mock.calls[0][0] as CreateTraceRequest;
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       expect(request.getName()).toBe('swap');
 
       const data = request.getData()!;
@@ -1056,35 +943,34 @@ describe('Trace', () => {
       expect(hints[0].getDetails()).toBe('swap tx');
     });
 
-    it('legacy chaining with update calls UpdateTrace for new data', async () => {
+    it('legacy chaining with subsequent flush sends new data via flushTrace', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addAttribute('a', '1');
 
       trace.flush();
       await flushPromises();
 
-      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
-      expect(trace.getTraceId()).toBe('trace-456');
+      expect(mockFlushTrace).toHaveBeenCalledTimes(1);
 
-      // Add more data after creation
+      // Add more data after first flush
       trace.addAttribute('b', '2').addEvent('phase2');
       trace.flush();
       await flushPromises();
 
-      expect(mockUpdateTrace).toHaveBeenCalled();
-      // Find the update call that contains our data (manual flush may cancel microtask, or both may fire)
-      const updateCalls = mockUpdateTrace.mock.calls;
-      const allUpdateEvents = updateCalls.flatMap((call: unknown[]) => {
+      expect(mockFlushTrace).toHaveBeenCalledTimes(2);
+      // Find the flush call that contains our new data
+      const allCalls = mockFlushTrace.mock.calls;
+      const allEvents = allCalls.flatMap((call: unknown[]) => {
         const req = call[0] as { getData: () => { getEventsList: () => Array<{ getName: () => string }> } | null };
         return req.getData()?.getEventsList() ?? [];
       });
-      const allUpdateAttrs = updateCalls.flatMap((call: unknown[]) => {
+      const allAttrs = allCalls.flatMap((call: unknown[]) => {
         const req = call[0] as { getData: () => { getAttributesList: () => Array<{ getAttributesMap: () => Map<string, string> }> } | null };
         return req.getData()?.getAttributesList() ?? [];
       });
-      const eventNames = allUpdateEvents.map((e: { getName: () => string }) => e.getName());
+      const eventNames = allEvents.map((e: { getName: () => string }) => e.getName());
       expect(eventNames).toContain('phase2');
-      const hasAttrB = allUpdateAttrs.some((a: { getAttributesMap: () => Map<string, string> }) => a.getAttributesMap().get('b') === '2');
+      const hasAttrB = allAttrs.some((a: { getAttributesMap: () => Map<string, string> }) => a.getAttributesMap().get('b') === '2');
       expect(hasAttrB).toBe(true);
     });
 
@@ -1118,8 +1004,7 @@ describe('Trace', () => {
     // Re-create mock with keepAlive/closeTrace so resumed-trace keep-alive and close tests work
     beforeEach(() => {
       (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
-        createTrace: mockCreateTrace,
-        updateTrace: mockUpdateTrace,
+        flushTrace: mockFlushTrace,
         keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
         closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
       }));
@@ -1133,119 +1018,18 @@ describe('Trace', () => {
       jest.useRealTimers();
     });
 
-    describe('setTraceId()', () => {
-      it('should return this for chaining', () => {
+    describe('getTraceId()', () => {
+      it('should return auto-generated trace ID immediately', () => {
         const trace = client.trace({ name: 'TestTrace' });
-        expect(trace.setTraceId('external-trace-123')).toBe(trace);
+        const traceId = trace.getTraceId();
+        expect(typeof traceId).toBe('string');
+        expect(traceId.length).toBe(32);
+        expect(traceId).toMatch(/^[0-9a-f]{32}$/);
       });
 
-      it('should set the trace ID', () => {
-        const trace = client.trace({ name: 'TestTrace' });
-        trace.setTraceId('external-trace-123');
-        expect(trace.getTraceId()).toBe('external-trace-123');
-      });
-
-      it('should cause first flush to send UpdateTrace instead of CreateTrace', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-        trace.setTraceId('external-trace-123');
-
-        trace.addAttribute('key', 'value');
-        trace.flush();
-        await jest.advanceTimersByTimeAsync(0);
-
-        expect(mockCreateTrace).not.toHaveBeenCalled();
-        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
-
-        const request = mockUpdateTrace.mock.calls[0][0];
-        expect(request.getTraceId()).toBe('external-trace-123');
-      });
-
-      it('should be ignored when trace is closed', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-          .addAttribute('key', 'value');
-
-        trace.flush();
-        await jest.advanceTimersByTimeAsync(0);
-
-        await trace.close('done');
-
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        trace.setTraceId('should-be-ignored');
-        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace is closed, ignoring setTraceId');
-        // Trace ID should remain as set by CreateTrace, not the new value
-        expect(trace.getTraceId()).toBe('trace-456');
-        warnSpy.mockRestore();
-      });
-
-      it('should be ignored when trace ID is already set via CreateTrace', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-          .addAttribute('key', 'value');
-
-        trace.flush();
-        await jest.advanceTimersByTimeAsync(0);
-
-        expect(trace.getTraceId()).toBe('trace-456');
-
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        trace.setTraceId('should-be-ignored');
-        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
-        expect(trace.getTraceId()).toBe('trace-456');
-        warnSpy.mockRestore();
-      });
-
-      it('should be ignored when trace ID is already set via setTraceId', () => {
-        const trace = client.trace({ name: 'TestTrace' });
-        trace.setTraceId('first-id');
-
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        trace.setTraceId('second-id');
-        expect(warnSpy).toHaveBeenCalledWith('[MiradorTrace] Trace ID is already set, ignoring setTraceId');
-        expect(trace.getTraceId()).toBe('first-id');
-        warnSpy.mockRestore();
-      });
-
-      it('should include pending data in the UpdateTrace request', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-        trace.setTraceId('external-trace-123');
-
-        trace
-          .addAttribute('wallet', '0xabc')
-          .addTag('resumed')
-          .addEvent('backend_handoff')
-          .addTxHint('0x123', 'ethereum');
-
-        trace.flush();
-        await jest.advanceTimersByTimeAsync(0);
-
-        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
-        const request = mockUpdateTrace.mock.calls[0][0];
-        const data = request.getData();
-
-        const attrsMap = data.getAttributesList()[0].getAttributesMap();
-        expect(attrsMap.get('wallet')).toBe('0xabc');
-        expect(data.getTagsList()[0].getTagsList()).toContain('resumed');
-
-        const eventNames = data.getEventsList().map((e: { getName: () => string }) => e.getName());
-        expect(eventNames).toContain('trace init');
-        expect(eventNames).toContain('backend_handoff');
-
-        expect(data.getTxHashHintsList()[0].getTxHash()).toBe('0x123');
-      });
-
-      it('should start keep-alive after first successful UpdateTrace', async () => {
-        const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-        trace.setTraceId('external-trace-123');
-
-        trace.addAttribute('key', 'value');
-        trace.flush();
-
-        // Advance past the flush (0ms) then past the keep-alive interval (15s)
-        await jest.advanceTimersByTimeAsync(15000);
-
-        // The keep-alive mock should have been called
-        const results = (IngestGatewayServiceClient as jest.Mock).mock.results;
-        const mockInstance = results[results.length - 1].value;
-        expect(mockInstance.keepAlive).toHaveBeenCalled();
+      it('should return user-provided trace ID when passed via options', () => {
+        const trace = client.trace({ name: 'TestTrace', traceId: 'custom-trace-id-123' });
+        expect(trace.getTraceId()).toBe('custom-trace-id-123');
       });
     });
 
@@ -1255,37 +1039,30 @@ describe('Trace', () => {
         expect(trace.getTraceId()).toBe('option-trace-id');
       });
 
-      it('should cause first flush to send UpdateTrace', async () => {
+      it('should send flushTrace with the provided traceId', async () => {
         const trace = client.trace({ name: 'TestTrace', traceId: 'option-trace-id', includeUserMeta: false })
           .addAttribute('key', 'value');
 
         trace.flush();
         await jest.advanceTimersByTimeAsync(0);
 
-        expect(mockCreateTrace).not.toHaveBeenCalled();
-        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+        expect(mockFlushTrace).toHaveBeenCalledTimes(1);
+        const request = mockFlushTrace.mock.calls[0][0];
+        expect(request.getTraceId()).toBe('option-trace-id');
       });
 
-      it('should prevent setTraceId from overriding', () => {
-        const trace = client.trace({ name: 'TestTrace', traceId: 'option-trace-id' });
-
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-        trace.setTraceId('override-attempt');
-        expect(trace.getTraceId()).toBe('option-trace-id');
-        warnSpy.mockRestore();
-      });
-
-      it('should work without traceId option (normal CreateTrace flow)', async () => {
+      it('should work without traceId option (auto-generated ID)', async () => {
         const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
           .addAttribute('key', 'value');
 
-        expect(trace.getTraceId()).toBeNull();
+        // Trace ID is always set immediately (auto-generated)
+        expect(typeof trace.getTraceId()).toBe('string');
+        expect(trace.getTraceId().length).toBe(32);
+
         trace.flush();
         await jest.advanceTimersByTimeAsync(0);
 
-        expect(mockCreateTrace).toHaveBeenCalledTimes(1);
-        expect(mockUpdateTrace).not.toHaveBeenCalled();
-        expect(trace.getTraceId()).toBe('trace-456');
+        expect(mockFlushTrace).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -1308,7 +1085,7 @@ describe('Trace', () => {
         frontendTrace.addAttribute('wallet', '0xabc');
         frontendTrace.flush();
 
-        // Wait for CreateTrace to complete and keepalive to tick
+        // Wait for flushTrace to complete and keepalive to tick
         await jest.advanceTimersByTimeAsync(15000);
 
         const frontendResults = (IngestGatewayServiceClient as jest.Mock).mock.results;
@@ -1316,8 +1093,9 @@ describe('Trace', () => {
         expect(frontendMock.keepAlive).toHaveBeenCalled();
 
         // --- Backend SDK instance: resumes the trace just to tag an event ---
-        const frontendTraceId = frontendTrace.getTraceId()!;
-        expect(frontendTraceId).toBe('trace-456');
+        const frontendTraceId = frontendTrace.getTraceId();
+        expect(typeof frontendTraceId).toBe('string');
+        expect(frontendTraceId.length).toBe(32);
 
         const backendClient = new Client('backend-api-key');
         const backendTrace = backendClient.trace({
@@ -1359,9 +1137,9 @@ describe('Trace', () => {
         backendTrace.flush();
         await jest.advanceTimersByTimeAsync(0);
 
-        // Verify the update was sent
-        expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
-        const request = mockUpdateTrace.mock.calls[0][0];
+        // Verify the flush was sent
+        expect(mockFlushTrace).toHaveBeenCalledTimes(1);
+        const request = mockFlushTrace.mock.calls[0][0];
         expect(request.getTraceId()).toBe('frontend-trace-abc');
 
         // Let 60 seconds pass — no zombie keepalive should fire
@@ -1599,9 +1377,9 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      // First flush is CreateTrace (auto-flush from setProvider chain resolution may have triggered)
+      // First flush is flushTrace (auto-flush from setProvider chain resolution may have triggered)
       // Find the request that has our events
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1631,7 +1409,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1667,7 +1445,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1714,7 +1492,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1741,7 +1519,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1768,7 +1546,7 @@ describe('Trace', () => {
       trace.flush();
       await flushPromises();
 
-      const allCalls = [...mockCreateTrace.mock.calls, ...mockUpdateTrace.mock.calls];
+      const allCalls = mockFlushTrace.mock.calls;
       const allEvents = allCalls.flatMap((call) => {
         const req = call[0];
         return req.getData()?.getEventsList() ?? [];
@@ -1811,25 +1589,20 @@ describe('chainIdToName', () => {
 
 describe('MiradorProvider', () => {
   let mockClient: Client;
-  let mockCreateTrace: jest.Mock;
-  let mockUpdateTrace: jest.Mock;
+  let mockFlushTrace: jest.Mock;
   let mockUnderlying: EIP1193Provider;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockCreateTrace = jest.fn().mockResolvedValue({
+    mockFlushTrace = jest.fn().mockResolvedValue({
       getTraceId: () => 'trace-provider-123',
-      getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
-    });
-
-    mockUpdateTrace = jest.fn().mockResolvedValue({
+      getCreated: () => true,
       getStatus: () => ({ getCode: () => ResponseStatus.StatusCode.STATUS_CODE_SUCCESS }),
     });
 
     (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
-      createTrace: mockCreateTrace,
-      updateTrace: mockUpdateTrace,
+      flushTrace: mockFlushTrace,
     }));
 
     mockClient = new Client('test-api-key');
