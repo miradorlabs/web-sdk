@@ -682,8 +682,8 @@ export class Trace {
 
   /**
    * Flush pending data to the gateway.
-   * Fire-and-forget — returns immediately but maintains strict ordering of requests.
-   * Each flush sends FlushTrace (an idempotent create-or-update RPC).
+   * Fire-and-forget — enqueues the network call and returns immediately (void).
+   * Use close() to await all pending flushes before shutting down.
    */
   flush(): void {
     if (this.closed || this.abandoned) {
@@ -781,9 +781,9 @@ export class Trace {
 
       await this.flushTrace(traceData);
     }).catch(err => {
+      // Safety net — flushTrace already handles expected errors and invokes onFlushError
       const context = traceName ? ` (trace: ${traceName})` : '';
-      this.client.logger.error(`[MiradorTrace] Flush error during FlushTrace${context}:`, err);
-      this.invokeCallback('onFlushError', err as Error, 'FlushTrace');
+      this.client.logger.error(`[MiradorTrace] Unexpected flush error${context}:`, err);
     });
   }
 
@@ -966,7 +966,11 @@ export class Trace {
         'FlushTrace'
       );
       if (response.getStatus()?.getCode() === ResponseStatus.StatusCode.STATUS_CODE_SUCCESS) {
+        const wasFirstFlush = !this.flushedOnce;
         this.flushedOnce = true;
+        if (wasFirstFlush) {
+          this.invokeCallback('onCreated', this.traceId);
+        }
         this.invokeCallback('onFlushed', this.traceId, traceData.getEventsList().length +
           traceData.getTxHashHintsList().length + traceData.getSafeMsgHintsList().length +
           traceData.getSafeTxHintsList().length + traceData.getAttributesList().length +
