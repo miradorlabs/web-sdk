@@ -1,5 +1,5 @@
 // Core SDK exports
-export { Client, Trace } from './src/ingest';
+export { Client, Trace, NoopTrace } from './src/ingest';
 
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
@@ -18,6 +18,8 @@ export type {
   AddEventOptions,
   StackFrame,
   StackTrace,
+  Logger,
+  TraceCallbacks,
 } from './src/ingest';
 
 // Re-export proto types for convenience
