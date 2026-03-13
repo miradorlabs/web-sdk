@@ -355,7 +355,9 @@ describe('Trace', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mockFlushTrace.mockRejectedValue(new Error('Connection failed'));
 
-      const trace = client.trace({ name: 'TestTrace', maxRetries: 0 })
+      // Create client with debug: true so console.error is actually called
+      const debugClient = new Client('test-api-key', { debug: true });
+      const trace = debugClient.trace({ name: 'TestTrace', maxRetries: 0 })
         .addAttribute('key', 'value');
 
       trace.flush();

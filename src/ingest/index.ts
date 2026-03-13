@@ -5,7 +5,7 @@
 
 // Classes
 export { Client } from './client';
-export { Trace } from './trace';
+export { Trace, NoopTrace } from './trace';
 export { MiradorProvider } from './provider';
 
 // Stack trace utilities
@@ -32,6 +32,8 @@ export type {
   TransactionLike,
   TransactionRequest,
   MiradorProviderOptions,
+  Logger,
+  TraceCallbacks,
 } from './types';
 
 // Metadata utilities (for advanced usage)

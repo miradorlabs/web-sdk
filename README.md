@@ -10,8 +10,8 @@ npm install @miradorlabs/web-sdk
 
 ## Features
 
-- **Keep-Alive** - Automatic periodic pings to maintain trace liveness (configurable interval)
-- **Trace Lifecycle** - Explicit close trace method with automatic cleanup
+- **Keep-Alive** - Automatic periodic pings with in-flight guard, single retry, and auto-stop after 3 consecutive failures
+- **Trace Lifecycle** - Explicit close trace method with automatic cleanup and flush queue draining
 - **Fluent Builder Pattern** - Method chaining for building traces
 - **Browser-optimized** - Automatic client metadata collection (browser, OS, etc.)
 - **Blockchain Integration** - Built-in support for correlating traces with blockchain transactions
@@ -21,6 +21,16 @@ npm install @miradorlabs/web-sdk
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
 - **Safe Multisig Tracking** - Track Safe message and transaction confirmations with `addSafeMsgHint()` and `addSafeTxHint()`
 - **EIP-1193 Provider Integration** - Send transactions directly through traces with `sendTransaction()`
+- **Configurable Logger** - Pluggable `Logger` interface (defaults to no-op; enable with `debug: true` or provide custom logger)
+- **Lifecycle Callbacks** - `TraceCallbacks` for observing flush success/failure, close, and dropped items
+- **Sampling** - `sampleRate` (0–1) or custom `sampler` function; sampled-out traces return `NoopTrace`
+- **Rate Limiting** - Automatic 30s client-wide backoff on `RESOURCE_EXHAUSTED` (gRPC code 8)
+- **Retry with Jitter** - Full jitter backoff (`random(0, base * 2^attempt)`) on retryable gRPC errors
+- **Queue Size Limits** - Configurable `maxQueueSize` (default 4096) with `onDropped` callback
+- **Flush Batch Splitting** - Large flushes automatically split at 100 items with overflow re-scheduling
+- **Trace Abandonment** - After retry exhaustion, trace stops all API calls to prevent runaway retries
+- **Max Trace Lifetime** - Optional `maxTraceLifetimeMs` to auto-close long-running traces
+- **Call Timeout** - Per-call `callTimeoutMs` (default 5000ms) wrapping all gRPC operations
 
 ## Quick Start (Default)
 
@@ -116,26 +126,27 @@ try {
 }
 ```
 
-### Auto-Close on Page Unload
+### Auto-Close on Page Visibility Change
 
-For browser-based applications, you can enable automatic trace closing when the user navigates away or closes the tab:
+For browser-based applications, you can enable automatic trace closing when the page becomes hidden:
 
 ```typescript
 const trace = client.trace({
   name: 'UserSession',
-  autoClose: true  // Automatically close on page unload
+  autoClose: true  // Automatically close when page becomes hidden
 });
 
-// Trace will automatically close with reason "Page unload" when:
-// - User closes the tab/window
+// Trace will automatically close with reason "Page hidden" when:
+// - User switches to a different tab
+// - User minimizes the browser
 // - User navigates to a different page
-// - Page is refreshed
+// - User closes the tab/window
 ```
 
 **Important Notes:**
-- Auto-close uses the `beforeunload` event
-- The trace will be closed with the reason "Page unload"
-- You can still manually call `close()` before page unload
+- Auto-close uses the `visibilitychange` event on `document`
+- The trace will be closed with the reason "Page hidden"
+- You can still manually call `close()` before the page becomes hidden
 - The event listener is automatically cleaned up when you manually close the trace
 
 ## API Reference
@@ -159,9 +170,15 @@ new Client(apiKey: string, options?: ClientOptions)
 
 ```typescript
 interface ClientOptions {
-  apiUrl?: string;              // Gateway URL (defaults to ingest.mirador.org:443)
+  apiUrl?: string;              // Gateway URL (defaults to https://ingest.mirador.org:443)
   keepAliveIntervalMs?: number; // Keep-alive ping interval in milliseconds (default: 10000)
   provider?: EIP1193Provider;   // EIP-1193 provider for transaction operations
+  callTimeoutMs?: number;       // Per-call timeout for gRPC operations (default: 5000)
+  debug?: boolean;              // Enable debug logging via console (default: false)
+  logger?: Logger;              // Custom logger implementation (defaults to no-op)
+  callbacks?: TraceCallbacks;   // Default lifecycle callbacks for all traces
+  sampleRate?: number;          // Sample rate 0–1 (default: 1 = send all)
+  sampler?: (options: TraceOptions) => boolean; // Custom sampler (overrides sampleRate)
 }
 ```
 
@@ -184,12 +201,14 @@ const trace = client.trace({ name: 'MyTrace', captureStackTrace: false });
 | `name` | `string` | `undefined` | Optional name of the trace |
 | `traceId` | `string` | auto-generated | Resume an existing trace by ID, or auto-generated W3C trace ID (32 hex chars) |
 | `includeUserMeta` | `boolean` | `true` | Include browser/OS metadata |
-| `maxRetries` | `number` | `3` | Maximum retry attempts on network failure |
-| `retryBackoff` | `number` | `1000` | Base delay in ms for exponential backoff (doubles each retry) |
-| `autoClose` | `boolean` | `false` | Automatically close trace on page unload |
-| `captureStackTrace` | `boolean` | `true` | Capture stack trace at trace creation point |
+| `maxRetries` | `number` | `2` | Maximum retry attempts on retryable gRPC errors |
+| `retryBackoff` | `number` | `500` | Base delay in ms for full jitter backoff |
+| `autoClose` | `boolean` | `false` | Automatically close trace on page visibility change |
 | `provider` | `EIP1193Provider` | `undefined` | EIP-1193 provider for transaction operations |
 | `autoKeepAlive` | `boolean` | `true`/`false` | Auto keep-alive (default: true for new, false when resuming) |
+| `maxTraceLifetimeMs` | `number` | `0` | Max trace lifetime in ms (0 = disabled). Auto-closes trace after this duration |
+| `maxQueueSize` | `number` | `4096` | Max pending items before dropping |
+| `callbacks` | `TraceCallbacks` | `undefined` | Per-trace lifecycle callbacks (overrides client-level) |
 
 > **Note:** A W3C-compatible trace ID (32 hex chars) is automatically generated when you call `client.trace()`. If you pass `traceId`, the trace resumes an existing trace instead.
 
@@ -441,6 +460,74 @@ Check if the trace has been closed.
 
 ```typescript
 const closed = trace.isClosed();  // boolean
+```
+
+## Logger
+
+By default, the SDK silences all log output. Enable logging with `debug: true` for console output, or provide a custom `Logger`:
+
+```typescript
+// Debug mode — logs to console.debug/warn/error
+const client = new Client('key', { debug: true });
+
+// Custom logger
+const client = new Client('key', {
+  logger: {
+    debug: (...args) => myLogger.debug(...args),
+    warn:  (...args) => myLogger.warn(...args),
+    error: (...args) => myLogger.error(...args),
+  },
+});
+```
+
+## Lifecycle Callbacks (TraceCallbacks)
+
+Observe trace lifecycle events programmatically:
+
+```typescript
+const client = new Client('key', {
+  callbacks: {
+    onFlushed:    (traceId, itemCount) => console.log(`Flushed ${itemCount} items`),
+    onFlushError: (error, operation)   => console.error(`${operation} failed:`, error),
+    onClosed:     (traceId, reason)    => console.log(`Trace closed: ${reason}`),
+    onDropped:    (count, reason)      => console.warn(`Dropped ${count} items: ${reason}`),
+  },
+});
+
+// Per-trace overrides
+const trace = client.trace({
+  name: 'ImportantFlow',
+  callbacks: { onFlushed: (id, n) => analytics.track('flush', { id, n }) },
+});
+```
+
+## Sampling
+
+Control which traces are actually sent:
+
+```typescript
+// Fixed sample rate — send 10% of traces
+const client = new Client('key', { sampleRate: 0.1 });
+
+// Custom sampler — full control
+const client = new Client('key', {
+  sampler: (options) => {
+    // Always sample traces named "critical"
+    if (options.name === 'critical') return true;
+    return Math.random() < 0.1;
+  },
+});
+```
+
+When a trace is sampled out, `client.trace()` returns a `NoopTrace` — a zero-cost stub with the same API surface. All method calls are no-ops, and `getTraceId()` returns a sentinel value (`'0'.repeat(32)`).
+
+```typescript
+import { NoopTrace } from '@miradorlabs/web-sdk';
+
+const trace = client.trace({ name: 'MaybeSampled' });
+if (trace instanceof NoopTrace) {
+  // This trace was sampled out — no network calls will be made
+}
 ```
 
 ## Complete Example: Transaction Tracking
@@ -719,6 +806,7 @@ import {
   // Classes
   Client,
   Trace,
+  NoopTrace,
   MiradorProvider,
 
   // Utilities
@@ -733,7 +821,7 @@ import {
 
   // Types
   ClientOptions,
-  TraceOptions,             // { name?, traceId?, includeUserMeta?, autoClose?, provider?, autoKeepAlive?, ... }
+  TraceOptions,             // { name?, traceId?, includeUserMeta?, autoClose?, provider?, autoKeepAlive?, maxTraceLifetimeMs?, maxQueueSize?, callbacks?, ... }
   AddEventOptions,          // { captureStackTrace?: boolean }
   StackFrame,               // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,               // { frames: StackFrame[], raw: string }
@@ -748,6 +836,8 @@ import {
   TransactionLike,          // { hash, data?, input?, chainId? }
   TransactionRequest,       // { from, to?, data?, value?, ... }
   MiradorProviderOptions,   // { trace?, traceOptions? }
+  Logger,                   // { debug(), warn(), error() }
+  TraceCallbacks,           // { onFlushed?, onFlushError?, onClosed?, onDropped? }
 } from '@miradorlabs/web-sdk';
 ```
 
