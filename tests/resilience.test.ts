@@ -141,6 +141,27 @@ describe('Lifecycle Callbacks', () => {
     }));
   });
 
+  it('onCreated is called only on first successful flush', async () => {
+    const onCreated = jest.fn();
+    const client = new Client('key', { callbacks: { onCreated } });
+    const trace = client.trace({ name: 'Test' });
+
+    // First flush — should trigger onCreated
+    trace.addEvent('event_1');
+    await flushMicrotasks();
+    await flushPromises();
+
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onCreated).toHaveBeenCalledWith(expect.any(String));
+
+    // Second flush — should NOT trigger onCreated again
+    trace.addEvent('event_2');
+    trace.flush();
+    await flushPromises();
+
+    expect(onCreated).toHaveBeenCalledTimes(1);
+  });
+
   it('onFlushed is called after successful flush', async () => {
     const onFlushed = jest.fn();
     const client = new Client('key', { callbacks: { onFlushed } });

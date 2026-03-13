@@ -1068,6 +1068,10 @@ export class Trace {
           this.keepAliveConsecutiveFailures = 0;
           return;
         }
+        // Retry explicitly rejected — stop immediately, same as initial rejection
+        this.client.logger.warn('[MiradorTrace] Keep-alive retry not accepted for trace:', this.traceId);
+        this.stopKeepAlive();
+        return;
       } catch {
         // Retry also failed
       }
