@@ -740,6 +740,9 @@ export class Trace {
       this.pendingSafeMsgHints = safeMsgHintsToSend;
       this.pendingSafeTxHints = safeTxHintsToSend;
 
+      const itemCount = eventsToSend.length + txHintsToSend.length +
+        safeMsgHintsToSend.length + safeTxHintsToSend.length +
+        Object.keys(this.pendingAttributes).length + this.pendingTags.length;
       const traceData = this.buildTraceData();
       this.pendingAttributes = {};
       this.pendingTags = [];
@@ -748,11 +751,14 @@ export class Trace {
       this.pendingSafeMsgHints = savedSafeMsgs;
       this.pendingSafeTxHints = savedSafeTxs;
 
-      this.enqueueFlush(traceData);
+      this.enqueueFlush(traceData, itemCount);
     } else {
+      const itemCount = this.pendingEvents.length + this.pendingTxHashHints.length +
+        this.pendingSafeMsgHints.length + this.pendingSafeTxHints.length +
+        Object.keys(this.pendingAttributes).length + this.pendingTags.length;
       const traceData = this.buildTraceData();
       this.clearPending();
-      this.enqueueFlush(traceData);
+      this.enqueueFlush(traceData, itemCount);
     }
 
     if (overflow) {
@@ -763,7 +769,7 @@ export class Trace {
   /**
    * Enqueue a flush operation onto the flush queue for strict ordering.
    */
-  private enqueueFlush(traceData: TraceData): void {
+  private enqueueFlush(traceData: TraceData, itemCount: number): void {
     const traceName = this.name;
 
     this.flushQueue = this.flushQueue.then(async () => {
@@ -779,7 +785,7 @@ export class Trace {
         }
       }
 
-      await this.flushTrace(traceData);
+      await this.flushTrace(traceData, itemCount);
     }).catch(err => {
       // Safety net — flushTrace already handles expected errors and invokes onFlushError
       const context = traceName ? ` (trace: ${traceName})` : '';
@@ -952,7 +958,7 @@ export class Trace {
   /**
    * Send FlushTrace request (idempotent create-or-update)
    */
-  private async flushTrace(traceData: TraceData): Promise<void> {
+  private async flushTrace(traceData: TraceData, itemCount: number): Promise<void> {
     const request = new FlushTraceRequest();
     request.setTraceId(this.traceId);
     if (this.name) {
@@ -971,10 +977,7 @@ export class Trace {
         if (wasFirstFlush) {
           this.invokeCallback('onCreated', this.traceId);
         }
-        this.invokeCallback('onFlushed', this.traceId, traceData.getEventsList().length +
-          traceData.getTxHashHintsList().length + traceData.getSafeMsgHintsList().length +
-          traceData.getSafeTxHintsList().length + traceData.getAttributesList().length +
-          traceData.getTagsList().length);
+        this.invokeCallback('onFlushed', this.traceId, itemCount);
         if (this.autoKeepAlive) {
           this.startKeepAlive();
         }
@@ -1008,6 +1011,7 @@ export class Trace {
     this.abandoned = true;
     this.microtaskScheduled = false;
     this.stopKeepAlive();
+    this.stopLifetimeTimer();
     this.clearPending();
   }
 
@@ -1080,13 +1084,22 @@ export class Trace {
   }
 
   /**
-   * Stop the keep-alive timer
+   * Stop the keep-alive interval timer.
+   * Does NOT clear the lifetime timer — the trace may still need to auto-close
+   * after maxTraceLifetimeMs even if keepAlive is stopped (e.g. server rejection).
    */
   stopKeepAlive(): void {
     if (this.keepAliveTimer !== null) {
       clearInterval(this.keepAliveTimer);
       this.keepAliveTimer = null;
     }
+  }
+
+  /**
+   * Stop the lifetime timer. Only called during close() and abandonTrace()
+   * when no further auto-close is needed.
+   */
+  private stopLifetimeTimer(): void {
     if (this.lifetimeTimer !== null) {
       clearTimeout(this.lifetimeTimer);
       this.lifetimeTimer = null;
@@ -1111,6 +1124,7 @@ export class Trace {
 
     this.closed = true;
     this.stopKeepAlive();
+    this.stopLifetimeTimer();
 
     // Remove visibility handler if it was registered
     if (this.visibilityHandler && typeof document !== 'undefined') {
