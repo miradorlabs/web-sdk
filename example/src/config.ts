@@ -6,7 +6,7 @@ import { ChainName } from '@miradorlabs/web-sdk'
 // Use the local proxy server to avoid CORS issues
 // The proxy forwards requests to the actual gateway at https://ingest.mirador.org
 // Make sure to run `npm run dev` which starts both the proxy and the http server
-export const GATEWAY_URL = 'http://localhost:3001';
+export const GATEWAY_URL = 'http://localhost:3002';
 
 // Network configuration type
 export interface NetworkConfig {

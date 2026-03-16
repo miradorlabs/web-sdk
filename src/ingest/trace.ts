@@ -8,10 +8,6 @@ import {
   Attributes,
   Tags,
   Event,
-  TxHashHint as TxHashHintProto,
-  SafeMsgHint as SafeMsgHintProto,
-  SafeTxHint as SafeTxHintProto,
-  Chain,
   KeepAliveRequest,
   KeepAliveResponse,
   CloseTraceRequest,
@@ -19,22 +15,12 @@ import {
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import type { TraceEvent, TxHashHint, SafeMsgHintData, SafeTxHintData, ChainName, AddEventOptions, StackTrace, EIP1193Provider, TxHintOptions, TransactionLike, TransactionRequest, Logger, TraceCallbacks } from './types';
+import type { TraceEvent, StackTrace, TraceCallbacks } from './types';
+import type { AddEventOptions, Logger } from '@miradorlabs/plugins';
+import type { MiradorPlugin, TraceContext, FlushBuilder } from '@miradorlabs/plugins';
 import { getClientMetadata } from './metadata';
 import { captureStackTrace } from './stacktrace';
-import { chainIdToName } from './chains';
-
-/**
- * Maps chain names to proto Chain enum values
- */
-const CHAIN_MAP: Record<ChainName, Chain> = {
-  ethereum: Chain.CHAIN_ETHEREUM,
-  polygon: Chain.CHAIN_POLYGON,
-  arbitrum: Chain.CHAIN_ARBITRUM,
-  base: Chain.CHAIN_BASE,
-  optimism: Chain.CHAIN_OPTIMISM,
-  bsc: Chain.CHAIN_BSC,
-};
+import { HINT_SERIALIZERS } from './hint-serializers';
 
 /** gRPC status codes that are safe to retry */
 const RETRYABLE_GRPC_CODES = new Set([
@@ -68,37 +54,11 @@ interface ResolvedTraceOptions {
   retryBackoff: number;
   keepAliveIntervalMs: number;
   autoClose: boolean;
-  provider?: EIP1193Provider;
   autoKeepAlive: boolean;
   callTimeoutMs: number;
   maxTraceLifetimeMs: number;
   maxQueueSize?: number;
   callbacks?: TraceCallbacks;
-}
-
-/**
- * Serialize transaction params for EIP-1193, converting bigints to hex strings
- */
-function serializeTxParams(tx: TransactionRequest): Record<string, string | undefined> {
-  const toHex = (val: string | bigint | number | undefined): string | undefined => {
-    if (val === undefined) return undefined;
-    if (typeof val === 'bigint') return '0x' + val.toString(16);
-    if (typeof val === 'number') return '0x' + val.toString(16);
-    return String(val);
-  };
-
-  return {
-    from: tx.from,
-    to: tx.to,
-    data: tx.data,
-    value: toHex(tx.value),
-    gas: toHex(tx.gas),
-    gasPrice: toHex(tx.gasPrice),
-    maxFeePerGas: toHex(tx.maxFeePerGas),
-    maxPriorityFeePerGas: toHex(tx.maxPriorityFeePerGas),
-    nonce: toHex(tx.nonce),
-    chainId: toHex(tx.chainId),
-  };
 }
 
 /**
@@ -165,18 +125,16 @@ export class Trace {
   private pendingAttributes: { [key: string]: string } = {};
   private pendingTags: string[] = [];
   private pendingEvents: TraceEvent[] = [];
-  private pendingTxHashHints: TxHashHint[] = [];
-  private pendingSafeMsgHints: SafeMsgHintData[] = [];
-  private pendingSafeTxHints: SafeTxHintData[] = [];
   private creationStackTrace: StackTrace | null = null;
   private creationTimestamp: Date = new Date();
 
   // Queue for maintaining strict ordering of flushes
   private flushQueue: Promise<void> = Promise.resolve();
 
-  // Provider configuration
-  private provider: EIP1193Provider | null = null;
-  private providerChainName: ChainName | null = null;
+  // Plugin system
+  private pluginOnFlush: Array<(builder: FlushBuilder) => void> = [];
+  private pluginOnClose: Array<() => void> = [];
+  private pluginHasPending: Array<() => boolean> = [];
 
   constructor(client: TraceSubmitter, options: ResolvedTraceOptions) {
     this.client = client;
@@ -192,10 +150,6 @@ export class Trace {
     this.maxTraceLifetimeMs = options.maxTraceLifetimeMs;
     this.maxQueueSize = options.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
     this.callbacks = options.callbacks;
-
-    if (options.provider) {
-      this.setProvider(options.provider);
-    }
 
     // Skip 2 frames: this constructor and the trace() method that called it
     this.creationStackTrace = captureStackTrace(2);
@@ -237,15 +191,65 @@ export class Trace {
   }
 
   /**
+   * Initialize plugins on this trace instance.
+   * Called by Client.trace() after construction.
+   * @internal
+   */
+  _initPlugins(plugins: MiradorPlugin<object>[]): void {
+    const ctx: TraceContext = {
+      addEvent: (name, details, options) => { this.addEvent(name, details, options); },
+      addAttribute: (key, value) => { this.addAttribute(key, value); },
+      addAttributes: (attrs) => { this.addAttributes(attrs); },
+      addTag: (tag) => { this.addTag(tag); },
+      addTags: (tags) => { this.addTags(tags); },
+      getTraceId: () => this.getTraceId(),
+      isClosed: () => this.isClosed(),
+      scheduleFlush: () => this.scheduleFlush(),
+      logger: this.client.logger,
+    };
+
+    for (const plugin of plugins) {
+      try {
+        const result = plugin.setup(ctx);
+
+        // Merge methods onto this instance
+        const methods = result.methods as Record<string, (...args: unknown[]) => unknown>;
+        for (const [methodName, fn] of Object.entries(methods)) {
+          if (methodName in this) {
+            ctx.logger.warn(
+              `[MiradorTrace] Plugin "${plugin.name}" method "${methodName}" conflicts with existing method. Skipping.`
+            );
+            continue;
+          }
+          (this as Record<string, unknown>)[methodName] = (...args: unknown[]) => {
+            const returnVal = fn(...args);
+            // If the return is undefined (void method), return this for chaining
+            return returnVal === undefined ? this : returnVal;
+          };
+        }
+
+        if (result.onFlush) {
+          this.pluginOnFlush.push(result.onFlush);
+        }
+        if (result.onClose) {
+          this.pluginOnClose.push(result.onClose);
+        }
+        if (result.hasPendingData) {
+          this.pluginHasPending.push(result.hasPendingData);
+        }
+      } catch (err) {
+        ctx.logger.error(`[MiradorTrace] Plugin "${plugin.name}" setup failed:`, err);
+      }
+    }
+  }
+
+  /**
    * Get current total pending items count
    */
   private get pendingCount(): number {
     return Object.keys(this.pendingAttributes).length +
       this.pendingTags.length +
-      this.pendingEvents.length +
-      this.pendingTxHashHints.length +
-      this.pendingSafeMsgHints.length +
-      this.pendingSafeTxHints.length;
+      this.pendingEvents.length;
   }
 
   /**
@@ -485,202 +489,6 @@ export class Trace {
   }
 
   /**
-   * Add a transaction hash hint for blockchain correlation.
-   * Multiple hints can be added to the same trace.
-   * @param txHash Transaction hash
-   * @param chain Chain name (e.g., "ethereum", "polygon", "base")
-   * @param options Optional details string or TxHintOptions object
-   * @returns This trace builder for chaining
-   */
-  addTxHint(txHash: string, chain: ChainName, options?: string | TxHintOptions): this {
-    if (this.closed) {
-      this.client.logger.warn('[MiradorTrace] Trace is closed, ignoring addTxHint');
-      return this;
-    }
-    if (this.isQueueFull()) return this;
-
-    let details: string | undefined;
-    if (typeof options === 'string') {
-      details = options;
-    } else if (options) {
-      if (options.input) {
-        this.addTxInputData(options.input);
-      }
-      details = options.details;
-    }
-
-    this.pendingTxHashHints.push({
-      txHash,
-      chain,
-      details,
-      timestamp: new Date(),
-    });
-    this.scheduleFlush();
-    return this;
-  }
-
-  /**
-   * Add a Safe message hint for tracking Safe multisig message confirmations.
-   * @param msgHint The Safe message hash to track
-   * @param chain Chain name (e.g., "ethereum", "polygon", "base")
-   * @param details Optional details string
-   * @returns This trace builder for chaining
-   */
-  addSafeMsgHint(msgHint: string, chain: ChainName, details?: string): this {
-    if (this.closed) {
-      this.client.logger.warn('[MiradorTrace] Trace is closed, ignoring addSafeMsgHint');
-      return this;
-    }
-    if (this.isQueueFull()) return this;
-
-    this.pendingSafeMsgHints.push({
-      messageHash: msgHint,
-      chain,
-      details,
-      timestamp: new Date(),
-    });
-    this.scheduleFlush();
-    return this;
-  }
-
-  /**
-   * Add a Safe transaction hint for tracking Safe multisig transaction confirmations.
-   * @param safeTxHash The Safe transaction hash to track
-   * @param chain Chain name (e.g., "ethereum", "polygon", "base")
-   * @param details Optional details string
-   * @returns This trace builder for chaining
-   */
-  addSafeTxHint(safeTxHash: string, chain: ChainName, details?: string): this {
-    if (this.closed) {
-      this.client.logger.warn('[MiradorTrace] Trace is closed, ignoring addSafeTxHint');
-      return this;
-    }
-    if (this.isQueueFull()) return this;
-
-    this.pendingSafeTxHints.push({
-      safeTxHash,
-      chain,
-      details,
-      timestamp: new Date(),
-    });
-    this.scheduleFlush();
-    return this;
-  }
-
-  /**
-   * Add transaction input data (calldata) as a trace event.
-   * Useful for debugging failed transactions where input data is still available.
-   * @param inputData The hex-encoded transaction input data (e.g., "0xa9059cbb...")
-   * @returns This trace builder for chaining
-   */
-  addTxInputData(inputData: string): this {
-    if (!inputData || inputData === '0x') return this;
-    return this.addEvent('Tx input data', inputData);
-  }
-
-  /**
-   * Add a transaction object, extracting hash, chain, and input data automatically.
-   * @param tx A transaction-like object (ethers, viem, or raw RPC format)
-   * @param chain Optional chain name override (inferred from tx.chainId if not provided)
-   * @returns This trace builder for chaining
-   */
-  addTx(tx: TransactionLike, chain?: ChainName): this {
-    if (this.closed) {
-      this.client.logger.warn('[MiradorTrace] Trace is closed, ignoring addTx');
-      return this;
-    }
-
-    const resolvedChain = this.resolveChain(chain, tx.chainId);
-    const input = tx.data ?? tx.input;
-
-    if (input) {
-      this.addTxInputData(input);
-    }
-    this.addTxHint(tx.hash, resolvedChain);
-    return this;
-  }
-
-  /**
-   * Set an EIP-1193 provider for transaction operations.
-   * Also initiates async chain ID detection.
-   * @param provider An EIP-1193 compatible provider
-   * @returns This trace builder for chaining
-   */
-  setProvider(provider: EIP1193Provider): this {
-    this.provider = provider;
-    provider.request({ method: 'eth_chainId' }).then((chainId) => {
-      this.providerChainName = chainIdToName(Number(chainId as string)) ?? null;
-    }).catch(() => { /* ignore */ });
-    return this;
-  }
-
-  /**
-   * Get the cached provider chain name
-   * @returns The provider's chain name or null if not available
-   */
-  getProviderChain(): ChainName | null {
-    return this.providerChainName;
-  }
-
-  /**
-   * Resolve chain name from explicit parameter, chainId, or provider cache.
-   * @param chain Explicit chain name
-   * @param chainId Chain ID from transaction
-   * @returns Resolved ChainName
-   * @throws If chain cannot be determined
-   */
-  resolveChain(chain?: ChainName, chainId?: number | bigint | string): ChainName {
-    if (chain) return chain;
-    if (chainId !== undefined) {
-      const resolved = chainIdToName(chainId);
-      if (resolved) return resolved;
-    }
-    if (this.providerChainName) return this.providerChainName;
-    throw new Error('[MiradorTrace] Cannot determine chain. Provide chain parameter, chainId, or set a provider.');
-  }
-
-  /**
-   * Send a transaction through the trace, capturing events and errors.
-   * @param tx Transaction parameters (EIP-1193 style)
-   * @param provider Optional provider override
-   * @returns The transaction hash
-   */
-  async sendTransaction(tx: TransactionRequest, provider?: EIP1193Provider): Promise<string> {
-    const p = provider ?? this.provider;
-    if (!p) throw new Error('[MiradorTrace] No provider configured. Use setProvider() or pass a provider.');
-
-    this.addEvent('tx:send', {
-      to: tx.to,
-      value: tx.value?.toString(),
-      data: tx.data ? `${tx.data.slice(0, 10)}...` : undefined,
-    });
-
-    try {
-      const txHash = await p.request({
-        method: 'eth_sendTransaction',
-        params: [serializeTxParams(tx)],
-      }) as string;
-
-      const chain = this.resolveChain(undefined, tx.chainId);
-      if (tx.data) {
-        this.addTxInputData(tx.data);
-      }
-      this.addTxHint(txHash, chain);
-      this.addEvent('tx:sent', { txHash });
-
-      return txHash;
-    } catch (err) {
-      const error = err as Error & { code?: unknown; data?: unknown };
-      this.addEvent('tx:error', {
-        message: error.message,
-        code: error.code,
-        data: error.data,
-      });
-      throw err;
-    }
-  }
-
-  /**
    * Flush pending data to the gateway.
    * Fire-and-forget — enqueues the network call and returns immediately (void).
    * Use close() to await all pending flushes before shutting down.
@@ -693,68 +501,42 @@ export class Trace {
     // Clear microtask flag since we're flushing now
     this.microtaskScheduled = false;
 
-    // Check if there's anything to flush
-    const hasPendingData =
+    // Check if there's anything to flush (core data or plugin data)
+    const hasCoreData =
       Object.keys(this.pendingAttributes).length > 0 ||
       this.pendingTags.length > 0 ||
-      this.pendingEvents.length > 0 ||
-      this.pendingTxHashHints.length > 0 ||
-      this.pendingSafeMsgHints.length > 0 ||
-      this.pendingSafeTxHints.length > 0;
+      this.pendingEvents.length > 0;
 
-    if (!hasPendingData && this.flushedOnce) {
+    const hasPluginData = this.pluginHasPending.some(fn => {
+      try { return fn(); } catch { return false; }
+    });
+
+    if (!hasCoreData && !hasPluginData && this.flushedOnce) {
       return; // Nothing to flush and trace already sent
     }
 
-    // Cap batch size: if too many items, keep extras pending for next flush
-    const totalItems = this.pendingEvents.length + this.pendingTxHashHints.length +
-      this.pendingSafeMsgHints.length + this.pendingSafeTxHints.length;
+    // Cap batch size: if too many events, keep extras pending for next flush
+    const totalItems = this.pendingEvents.length;
     let overflow = false;
 
     if (totalItems > Trace.MAX_FLUSH_BATCH_SIZE) {
       overflow = true;
-      let budget = Trace.MAX_FLUSH_BATCH_SIZE;
-      const eventsToSend = this.pendingEvents.slice(0, budget);
-      budget -= eventsToSend.length;
-      const txHintsToSend = this.pendingTxHashHints.slice(0, budget);
-      budget -= txHintsToSend.length;
-      const safeMsgHintsToSend = this.pendingSafeMsgHints.slice(0, budget);
-      budget -= safeMsgHintsToSend.length;
-      const safeTxHintsToSend = this.pendingSafeTxHints.slice(0, budget);
+      const eventsToSend = this.pendingEvents.slice(0, Trace.MAX_FLUSH_BATCH_SIZE);
 
       // Keep the rest pending
-      this.pendingEvents = this.pendingEvents.slice(eventsToSend.length);
-      this.pendingTxHashHints = this.pendingTxHashHints.slice(txHintsToSend.length);
-      this.pendingSafeMsgHints = this.pendingSafeMsgHints.slice(safeMsgHintsToSend.length);
-      this.pendingSafeTxHints = this.pendingSafeTxHints.slice(safeTxHintsToSend.length);
-
-      // Note: attributes and tags are consumed entirely by the first batch and won't
-      // appear alongside overflow events. This is acceptable because attributes/tags are
-      // additive metadata (merged server-side), not positional data like events/hints.
-      const savedEvents = this.pendingEvents;
-      const savedTxHints = this.pendingTxHashHints;
-      const savedSafeMsgs = this.pendingSafeMsgHints;
-      const savedSafeTxs = this.pendingSafeTxHints;
+      const savedEvents = this.pendingEvents.slice(eventsToSend.length);
       this.pendingEvents = eventsToSend;
-      this.pendingTxHashHints = txHintsToSend;
-      this.pendingSafeMsgHints = safeMsgHintsToSend;
-      this.pendingSafeTxHints = safeTxHintsToSend;
 
-      const itemCount = eventsToSend.length + txHintsToSend.length +
-        safeMsgHintsToSend.length + safeTxHintsToSend.length +
+      const itemCount = eventsToSend.length +
         Object.keys(this.pendingAttributes).length + this.pendingTags.length;
       const traceData = this.buildTraceData();
       this.pendingAttributes = {};
       this.pendingTags = [];
       this.pendingEvents = savedEvents;
-      this.pendingTxHashHints = savedTxHints;
-      this.pendingSafeMsgHints = savedSafeMsgs;
-      this.pendingSafeTxHints = savedSafeTxs;
 
       this.enqueueFlush(traceData, itemCount);
     } else {
-      const itemCount = this.pendingEvents.length + this.pendingTxHashHints.length +
-        this.pendingSafeMsgHints.length + this.pendingSafeTxHints.length +
+      const itemCount = this.pendingEvents.length +
         Object.keys(this.pendingAttributes).length + this.pendingTags.length;
       const traceData = this.buildTraceData();
       this.clearPending();
@@ -794,7 +576,8 @@ export class Trace {
   }
 
   /**
-   * Build TraceData from pending state
+   * Build TraceData from pending state.
+   * Plugin onFlush hooks are called to contribute additional data.
    */
   private buildTraceData(): TraceData {
     const traceData = new TraceData();
@@ -836,49 +619,57 @@ export class Trace {
       traceData.addEvents(eventMsg);
     }
 
-    // Add pending tx hints
-    for (const hint of this.pendingTxHashHints) {
-      const hintMsg = new TxHashHintProto();
-      hintMsg.setTxHash(hint.txHash);
-      hintMsg.setChain(CHAIN_MAP[hint.chain]);
-      if (hint.details) {
-        hintMsg.setDetails(hint.details);
+    // Let plugins contribute data
+    if (this.pluginOnFlush.length > 0) {
+      const builder = this.createFlushBuilder(traceData);
+      for (const onFlush of this.pluginOnFlush) {
+        try {
+          onFlush(builder);
+        } catch (err) {
+          this.client.logger.error('[MiradorTrace] Plugin onFlush error:', err);
+        }
       }
-      const ts = new Timestamp();
-      ts.fromDate(hint.timestamp);
-      hintMsg.setTimestamp(ts);
-      traceData.addTxHashHints(hintMsg);
-    }
-
-    // Add pending safe msg hints
-    for (const hint of this.pendingSafeMsgHints) {
-      const hintMsg = new SafeMsgHintProto();
-      hintMsg.setMessageHash(hint.messageHash);
-      hintMsg.setChain(CHAIN_MAP[hint.chain]);
-      if (hint.details) {
-        hintMsg.setDetails(hint.details);
-      }
-      const ts = new Timestamp();
-      ts.fromDate(hint.timestamp);
-      hintMsg.setTimestamp(ts);
-      traceData.addSafeMsgHints(hintMsg);
-    }
-
-    // Add pending safe tx hints
-    for (const hint of this.pendingSafeTxHints) {
-      const hintMsg = new SafeTxHintProto();
-      hintMsg.setSafeTxHash(hint.safeTxHash);
-      hintMsg.setChain(CHAIN_MAP[hint.chain]);
-      if (hint.details) {
-        hintMsg.setDetails(hint.details);
-      }
-      const ts = new Timestamp();
-      ts.fromDate(hint.timestamp);
-      hintMsg.setTimestamp(ts);
-      traceData.addSafeTxHints(hintMsg);
     }
 
     return traceData;
+  }
+
+  /**
+   * Create a FlushBuilder that populates the given TraceData with plugin contributions.
+   * Uses protobuf class-based API for web SDK serialization.
+   */
+  private createFlushBuilder(traceData: TraceData): FlushBuilder {
+    const logger = this.client.logger;
+    return {
+      addHint(type: string, data: Record<string, unknown>) {
+        const serializer = HINT_SERIALIZERS[type];
+        if (!serializer) {
+          logger.warn(`[MiradorTrace] Unknown hint type: "${type}". Hint dropped.`);
+          return;
+        }
+        serializer(traceData, data);
+      },
+      addEvent(event) {
+        const eventMsg = new Event();
+        eventMsg.setName(event.name);
+        if (event.details) eventMsg.setDetails(event.details);
+        const ts = new Timestamp();
+        ts.fromDate(event.timestamp);
+        eventMsg.setTimestamp(ts);
+        traceData.addEvents(eventMsg);
+      },
+      addAttribute(key, value) {
+        const attrsMsg = new Attributes();
+        const attrsMap = attrsMsg.getAttributesMap();
+        attrsMap.set(key, value);
+        traceData.addAttributes(attrsMsg);
+      },
+      addTag(tag) {
+        const tagsMsg = new Tags();
+        tagsMsg.setTagsList([tag]);
+        traceData.addTags(tagsMsg);
+      },
+    };
   }
 
   /**
@@ -998,9 +789,6 @@ export class Trace {
     this.pendingAttributes = {};
     this.pendingTags = [];
     this.pendingEvents = [];
-    this.pendingTxHashHints = [];
-    this.pendingSafeMsgHints = [];
-    this.pendingSafeTxHints = [];
   }
 
   /**
@@ -1136,6 +924,15 @@ export class Trace {
       this.visibilityHandler = null;
     }
 
+    // Call plugin onClose hooks
+    for (const onClose of this.pluginOnClose) {
+      try {
+        onClose();
+      } catch (err) {
+        this.client.logger.error('[MiradorTrace] Plugin onClose error:', err);
+      }
+    }
+
     // If trace was abandoned, skip all network calls
     if (this.abandoned) {
       return;
@@ -1233,6 +1030,42 @@ export class NoopTrace extends Trace {
     this.closed = true;
   }
 
+  /**
+   * Override: Install plugin methods as no-ops without full setup.
+   * @internal
+   */
+  _initPlugins(plugins: MiradorPlugin<object>[]): void {
+    const noopCtx: TraceContext = {
+      addEvent() {},
+      addAttribute() {},
+      addAttributes() {},
+      addTag() {},
+      addTags() {},
+      getTraceId: () => '0'.repeat(32),
+      isClosed: () => true,
+      scheduleFlush() {},
+      logger: { debug() {}, warn() {}, error() {} },
+    };
+
+    for (const plugin of plugins) {
+      try {
+        const result = plugin.setup(noopCtx);
+        const methods = result.methods as Record<string, unknown>;
+        const noopMethods = result.noopMethods as Record<string, unknown> | undefined;
+        for (const methodName of Object.keys(methods)) {
+          if (noopMethods && methodName in noopMethods) {
+            (this as Record<string, unknown>)[methodName] = noopMethods[methodName];
+          } else {
+            (this as Record<string, unknown>)[methodName] = () => this;
+          }
+        }
+        // Do NOT register onFlush/onClose hooks — NoopTrace never flushes
+      } catch {
+        // Swallow errors in noop context
+      }
+    }
+  }
+
   // Override all public methods to be no-ops
   addAttribute(): this { return this; }
   addAttributes(): this { return this; }
@@ -1241,13 +1074,6 @@ export class NoopTrace extends Trace {
   addEvent(): this { return this; }
   addStackTrace(): this { return this; }
   addExistingStackTrace(): this { return this; }
-  addTxHint(): this { return this; }
-  addSafeMsgHint(): this { return this; }
-  addSafeTxHint(): this { return this; }
-  addTxInputData(): this { return this; }
-  addTx(): this { return this; }
-  setProvider(): this { return this; }
-  async sendTransaction(): Promise<string> { return ''; }
   flush(): void {}
   async close(): Promise<void> {}
   /** Sentinel trace ID — not a valid trace, used only for NoopTrace */

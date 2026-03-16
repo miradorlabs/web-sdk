@@ -2,7 +2,11 @@
 // Type Definitions
 // ============================================================================
 
-import type { Client, Trace } from '@miradorlabs/web-sdk';
+import type { Client as BaseClient, Trace as BaseTrace, MiradorPlugin, Web3Methods, SafeMethods } from '@miradorlabs/web-sdk';
+
+// Client and Trace typed with the plugins used in this example
+type Client = BaseClient<[MiradorPlugin<Web3Methods>, MiradorPlugin<SafeMethods>]>;
+type Trace = ReturnType<Client['trace']>;
 
 // EIP-6963 Provider Info
 export interface EIP6963ProviderInfo {
@@ -112,5 +116,5 @@ export interface DOMElements {
   proxyStatus: HTMLElement | null;
 }
 
-// Re-export Client type
+// Re-export Client type (parameterized with plugins used in this example)
 export type { Client, Trace };
