@@ -160,13 +160,13 @@ export async function sendTransaction(): Promise<void> {
 
     // Add transaction hash hint and input data for blockchain correlation
     const chainName: ChainName = networkInfo.chain || 'ethereum';
-    trace.addTxHint(txHash, chainName, isTokenTransfer ? 'ERC-20 Transfer' : 'ETH Transfer');
-    trace.addTxInputData(tx.data);
+    trace.web3.evm.addTxHint(txHash, chainName, isTokenTransfer ? 'ERC-20 Transfer' : 'ETH Transfer');
+    trace.web3.evm.addInputData(tx.data);
 
     // Optional: Add a Safe message hint if this is a Safe multisig operation.
     // Uncomment the line below and provide the Safe message hash to track
     // multisig confirmations for this transaction.
-    // trace.addSafeMsgHint('<safe-message-hash>', chainName, 'Multisig approval');
+    // trace.web3.safe.addMsgHint('<safe-message-hash>', chainName, 'Multisig approval');
 
     // Flush and wait for trace ID
     trace.flush();

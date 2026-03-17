@@ -2,10 +2,10 @@
 // Type Definitions
 // ============================================================================
 
-import type { Client as BaseClient, Trace as BaseTrace, MiradorPlugin, Web3Methods, SafeMethods } from '@miradorlabs/web-sdk';
+import type { Client as BaseClient, Trace as BaseTrace, MiradorPlugin, Web3Methods } from '@miradorlabs/web-sdk';
 
 // Client and Trace typed with the plugins used in this example
-type Client = BaseClient<[MiradorPlugin<Web3Methods>, MiradorPlugin<SafeMethods>]>;
+type Client = BaseClient<[MiradorPlugin<Web3Methods>]>;
 type Trace = ReturnType<Client['trace']>;
 
 // EIP-6963 Provider Info

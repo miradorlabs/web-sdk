@@ -193,7 +193,7 @@ window.dispatchEvent(new Event('eip6963:requestProvider'));
 1. **Wallet Connection**: User selects a wallet, connects via EIP-1193 provider
 2. **Trace Creation**: Creates a Mirador trace with wallet and transaction metadata
 3. **Transaction Submission**: Sends the transaction via the selected wallet
-4. **Trace Association**: Links the transaction hash via `addTxHint()`
+4. **Trace Association**: Links the transaction hash via `web3.evm.addTxHint()`
 5. **Confirmation Polling**: Monitors the transaction until confirmed on-chain
 6. **Trace Close**: Closes the trace with confirmation details
 
@@ -251,7 +251,7 @@ trace.addTags(['web3', 'transfer']);
 trace.addEvent('transaction_initiated', { from, to, value });
 
 // 6. After getting tx hash, add it as a hint for blockchain correlation
-trace.addTxHint(txHash, 'ethereum', 'ETH Transfer');
+trace.web3.evm.addTxHint(txHash, 'ethereum', 'ETH Transfer');
 
 // 7. The trace auto-flushes, but you can force it
 trace.flush();

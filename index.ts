@@ -9,9 +9,7 @@ export { chainIdToName } from './src/ingest';
 
 // Plugin system
 export { Web3Plugin } from './src/ingest';
-export type { Web3PluginOptions, Web3Methods } from './src/ingest';
-export { SafePlugin } from './src/ingest';
-export type { SafeMethods } from './src/ingest';
+export type { Web3PluginOptions, Web3Methods, EvmMethods, SafeNamespaceMethods } from './src/ingest';
 export { HintType } from './src/ingest';
 export type {
   MiradorPlugin,

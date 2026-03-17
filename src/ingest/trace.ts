@@ -208,25 +208,40 @@ export class Trace {
       logger: this.client.logger,
     };
 
-    for (const plugin of plugins) {
-      try {
-        const result = plugin.setup(ctx);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const trace = this;
 
-        // Merge methods onto this instance
-        const methods = result.methods as Record<string, (...args: unknown[]) => unknown>;
-        for (const [methodName, fn] of Object.entries(methods)) {
-          if (methodName in this) {
+    function mergeNamespace(
+      target: Record<string, unknown>,
+      source: Record<string, unknown>,
+      pluginName: string,
+    ): void {
+      for (const [key, value] of Object.entries(source)) {
+        if (typeof value === 'function') {
+          if (key in target && typeof target[key] !== 'undefined') {
             ctx.logger.warn(
-              `[MiradorTrace] Plugin "${plugin.name}" method "${methodName}" conflicts with existing method. Skipping.`
+              `[MiradorTrace] Plugin "${pluginName}" method "${key}" conflicts with existing method. Skipping.`
             );
             continue;
           }
-          (this as Record<string, unknown>)[methodName] = (...args: unknown[]) => {
-            const returnVal = fn(...args);
-            // If the return is undefined (void method), return this for chaining
-            return returnVal === undefined ? this : returnVal;
+          const fn = value as (...args: unknown[]) => unknown;
+          target[key] = (...args: unknown[]) => {
+            const ret = fn(...args);
+            return ret === undefined ? trace : ret;
           };
+        } else if (typeof value === 'object' && value !== null) {
+          if (!target[key] || typeof target[key] !== 'object') {
+            target[key] = {};
+          }
+          mergeNamespace(target[key] as Record<string, unknown>, value as Record<string, unknown>, pluginName);
         }
+      }
+    }
+
+    for (const plugin of plugins) {
+      try {
+        const result = plugin.setup(ctx);
+        mergeNamespace(this as unknown as Record<string, unknown>, result.methods as Record<string, unknown>, plugin.name);
 
         if (result.onFlush) {
           this.pluginOnFlush.push(result.onFlush);
@@ -1047,18 +1062,43 @@ export class NoopTrace extends Trace {
       logger: { debug() {}, warn() {}, error() {} },
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const trace = this;
+
+    function mergeNamespaceNoop(
+      target: Record<string, unknown>,
+      source: Record<string, unknown>,
+      noopSource: Record<string, unknown> | undefined,
+    ): void {
+      for (const [key, value] of Object.entries(source)) {
+        const noopValue = noopSource?.[key];
+        if (typeof value === 'function') {
+          if (noopValue && typeof noopValue === 'function') {
+            target[key] = noopValue;
+          } else {
+            target[key] = () => trace;
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          if (!target[key] || typeof target[key] !== 'object') {
+            target[key] = {};
+          }
+          mergeNamespaceNoop(
+            target[key] as Record<string, unknown>,
+            value as Record<string, unknown>,
+            (noopValue && typeof noopValue === 'object') ? noopValue as Record<string, unknown> : undefined,
+          );
+        }
+      }
+    }
+
     for (const plugin of plugins) {
       try {
         const result = plugin.setup(noopCtx);
-        const methods = result.methods as Record<string, unknown>;
-        const noopMethods = result.noopMethods as Record<string, unknown> | undefined;
-        for (const methodName of Object.keys(methods)) {
-          if (noopMethods && methodName in noopMethods) {
-            (this as Record<string, unknown>)[methodName] = noopMethods[methodName];
-          } else {
-            (this as Record<string, unknown>)[methodName] = () => this;
-          }
-        }
+        mergeNamespaceNoop(
+          this as unknown as Record<string, unknown>,
+          result.methods as Record<string, unknown>,
+          result.noopMethods as Record<string, unknown> | undefined,
+        );
         // Do NOT register onFlush/onClose hooks — NoopTrace never flushes
       } catch {
         // Swallow errors in noop context

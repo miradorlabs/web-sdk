@@ -1,5 +1,5 @@
 // Resilience feature tests for web-sdk
-import { Client, Trace, NoopTrace } from '../src/ingest';
+import { Client, Trace, NoopTrace, Web3Plugin } from '../src/ingest';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 
@@ -87,20 +87,32 @@ describe('Sampling', () => {
 });
 
 describe('NoopTrace', () => {
-  it('all builder methods return this', () => {
+  beforeEach(() => {
+    (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+      flushTrace: jest.fn().mockResolvedValue(successResponse),
+    }));
+  });
+
+  it('all builder methods return this (core)', () => {
     const trace = new NoopTrace();
-    expect(trace.addAttribute('k', 'v')).toBe(trace);
-    expect(trace.addAttributes({ k: 'v' })).toBe(trace);
-    expect(trace.addTag('t')).toBe(trace);
-    expect(trace.addTags(['t'])).toBe(trace);
-    expect(trace.addEvent('e')).toBe(trace);
+    expect(trace.addAttribute()).toBe(trace);
+    expect(trace.addAttributes()).toBe(trace);
+    expect(trace.addTag()).toBe(trace);
+    expect(trace.addTags()).toBe(trace);
+    expect(trace.addEvent()).toBe(trace);
     expect(trace.addStackTrace()).toBe(trace);
-    expect(trace.addTxHint()).toBe(trace);
-    expect(trace.addSafeMsgHint()).toBe(trace);
-    expect(trace.addSafeTxHint()).toBe(trace);
-    expect(trace.addTxInputData()).toBe(trace);
-    expect(trace.addTx()).toBe(trace);
-    expect(trace.setProvider()).toBe(trace);
+  });
+
+  it('all plugin methods are no-ops when initialized via Client', () => {
+    const client = new Client('key', { sampleRate: 0, plugins: [Web3Plugin()] });
+    const trace = client.trace({ name: 'Test' });
+    expect(trace).toBeInstanceOf(NoopTrace);
+    expect(trace.web3.evm.addTxHint('0x', 'ethereum')).toBe(trace);
+    expect(trace.web3.safe.addMsgHint('0x', 'ethereum')).toBe(trace);
+    expect(trace.web3.safe.addSafeTxHint('0x', 'ethereum')).toBe(trace);
+    expect(trace.web3.evm.addInputData('0x')).toBe(trace);
+    expect(trace.web3.evm.addTx({ hash: '0x', chainId: 1 })).toBe(trace);
+    expect(trace.web3.evm.setProvider({ request: async () => null })).toBe(trace);
   });
 
   it('isClosed returns true', () => {
@@ -120,7 +132,9 @@ describe('NoopTrace', () => {
   });
 
   it('sendTransaction returns empty string instead of throwing', async () => {
-    const result = await new NoopTrace().sendTransaction();
+    const client = new Client('key', { sampleRate: 0, plugins: [Web3Plugin()] });
+    const trace = client.trace({ name: 'Test' });
+    const result = await trace.web3.evm.sendTransaction({ from: '0x' });
     expect(result).toBe('');
   });
 });
