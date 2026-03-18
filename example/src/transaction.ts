@@ -198,7 +198,7 @@ export async function sendTransaction(): Promise<void> {
       showStatus('Transaction cancelled', 'info');
 
       if (traceState.currentTrace) {
-        traceState.currentTrace.warning('transaction_rejected', { reason: 'User rejected' });
+        traceState.currentTrace.warn('transaction_rejected', { reason: 'User rejected' });
         await traceState.currentTrace.close('Transaction rejected by user');
         traceState.currentTrace = null;
       }
