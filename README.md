@@ -19,7 +19,7 @@ npm install @miradorlabs/web-sdk
 - **TypeScript Support** - Full type definitions included
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
-- **Safe Multisig Tracking** - Track Safe message and transaction confirmations with `addSafeMsgHint()` and `addSafeTxHint()`
+- **Safe Multisig Tracking** - Track Safe message and transaction confirmations via `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
 - **EIP-1193 Provider Integration** - Send transactions directly through traces with `sendTransaction()`
 - **Configurable Logger** - Pluggable `Logger` interface (defaults to no-op; enable with `debug: true` or provide custom logger)
 - **Lifecycle Callbacks** - `TraceCallbacks` for observing flush success/failure, close, and dropped items
@@ -46,7 +46,7 @@ const trace = client.trace({ name: 'SwapExecution' })
 // → FlushTrace sent after 50ms of inactivity
 
 trace.addEvent('transaction_signed')
-     .addTxHint('0xtxhash...', 'ethereum');
+     .web3.evm.addTxHint('0xtxhash...', 'ethereum');
 // → FlushTrace sent after 50ms of inactivity
 
 // You can still call flush() explicitly to send immediately
@@ -69,7 +69,7 @@ const trace = client.trace({ name: 'SwapExecution', })
 trace.flush();  // → FlushTrace
 
 trace.addEvent('transaction_signed')
-     .addTxHint('0xtxhash...', 'ethereum');
+     .web3.evm.addTxHint('0xtxhash...', 'ethereum');
 
 trace.flush();  // → FlushTrace
 ```
@@ -306,111 +306,87 @@ trace.addExistingStackTrace(stack, 'deferred_location', { reason: 'async operati
 | `eventName`         | `string`     | Event name (defaults to "stack_trace")           |
 | `additionalDetails` | `object`     | Optional additional details to include           |
 
-#### `addTxHint(txHash, chain, details?)`
+#### Web3Plugin Methods
 
-Add a transaction hash hint for blockchain correlation. Multiple hints can be added.
+The following methods are available when `Web3Plugin` is registered. They are accessed via the `web3.evm` and `web3.safe` namespaces on the trace.
+
+##### `web3.evm.addTxHint(txHash, chain, options?)`
+
+Add a transaction hash hint for blockchain correlation. Accepts `Chain` enum or chain name string.
 
 ```typescript
-trace.addTxHint('0x123...', 'ethereum', 'Main transaction')
-     .addTxHint('0x456...', 'polygon', 'Bridge transaction')
+import { Chain } from '@miradorlabs/web-sdk';
+
+trace.web3.evm.addTxHint('0x123...', Chain.Ethereum, 'Main transaction');
+trace.web3.evm.addTxHint('0x456...', 'polygon', 'Bridge transaction'); // string also works
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `txHash` | `string` | Transaction hash |
-| `chain` | `ChainName` | Chain name: 'ethereum' \| 'polygon' \| 'arbitrum' \| 'base' \| 'optimism' \| 'bsc' |
-| `details` | `string` | Optional details about the transaction |
+| `chain` | `Chain \| ChainName` | Chain enum value or name string |
+| `options` | `string \| TxHintOptions` | Optional details string, or options with `input` and `details` |
 
-#### `addSafeMsgHint(msgHint, chain, details?)`
+##### `web3.safe.addMsgHint(msgHash, chain, details?)`
 
-Add a Safe message hint for tracking Safe multisig message confirmations. Mirador will monitor the Safe contract for confirmation events related to the given message hash.
+Add a Safe message hint for tracking Safe multisig message confirmations.
 
 ```typescript
-trace.addSafeMsgHint('0xmsgHash...', 'ethereum')
-     .addSafeMsgHint('0xotherHash...', 'base', 'Token approval')
+trace.web3.safe.addMsgHint('0xmsgHash...', Chain.Ethereum);
+trace.web3.safe.addMsgHint('0xotherHash...', Chain.Base, 'Token approval');
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `msgHint` | `string` | The Safe message hash to track |
-| `chain` | `ChainName` | Chain name: `'ethereum'` \| `'polygon'` \| `'arbitrum'` \| `'base'` \| `'optimism'` \| `'bsc'` |
-| `details` | `string` | Optional details about the message |
-
-#### `addSafeTxHint(safeTxHash, chain, details?)`
+##### `web3.safe.addTxHint(safeTxHash, chain, details?)`
 
 Add a Safe transaction hint for tracking Safe multisig transaction executions.
 
 ```typescript
-trace.addSafeTxHint('0xsafeTxHash...', 'ethereum')
-     .addSafeTxHint('0xotherHash...', 'base', 'Token transfer')
+trace.web3.safe.addTxHint('0xsafeTxHash...', Chain.Ethereum);
+trace.web3.safe.addTxHint('0xotherHash...', Chain.Base, 'Token transfer');
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `safeTxHash` | `string` | The Safe transaction hash to track |
-| `chain` | `ChainName` | Chain name: `'ethereum'` \| `'polygon'` \| `'arbitrum'` \| `'base'` \| `'optimism'` \| `'bsc'` |
-| `details` | `string` | Optional details about the transaction |
-
-#### `addTx(tx, chain?)`
+##### `web3.evm.addTx(tx, chain?)`
 
 Add a transaction object, automatically extracting hash, chain, and input data.
 
 ```typescript
 const tx = await signer.sendTransaction({ to, data });
-trace.addTx(tx, 'ethereum');
+trace.web3.evm.addTx(tx, Chain.Ethereum);
 
 // Chain inferred from tx.chainId if not provided
-trace.addTx({ hash: txHash, data: calldata, chainId: 1 });
+trace.web3.evm.addTx({ hash: txHash, data: calldata, chainId: 1 });
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `tx` | `TransactionLike` | Transaction object with `hash`, optional `data`/`input`/`chainId` |
-| `chain` | `ChainName` | Optional chain override (inferred from `tx.chainId` or provider if omitted) |
-
-#### `sendTransaction(tx, provider?)`
+##### `web3.evm.sendTransaction(tx, provider?)`
 
 Send a transaction through the trace's EIP-1193 provider, automatically capturing events (`tx:send`, `tx:sent`, `tx:error`), input data, and tx hint.
 
 ```typescript
-const client = new Client('key', { provider: window.ethereum });
+const client = new Client('key', { plugins: [Web3Plugin({ provider: window.ethereum })] });
 const trace = client.trace({ name: 'Swap' });
 
-const txHash = await trace.sendTransaction({
+const txHash = await trace.web3.evm.sendTransaction({
   from: '0xabc...',
   to: '0xRouterAddress...',
   data: '0x38ed1739...',
 });
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `tx` | `TransactionRequest` | EIP-1193 style transaction parameters |
-| `provider` | `EIP1193Provider` | Optional provider override |
-
-Returns: `Promise<string>` - The transaction hash
-
-#### `setProvider(provider)`
+##### `web3.evm.setProvider(provider)`
 
 Set an EIP-1193 provider for transaction operations. Automatically detects chain ID.
 
 ```typescript
-trace.setProvider(window.ethereum);
+trace.web3.evm.setProvider(window.ethereum);
 ```
 
-#### `addTxInputData(inputData)`
+##### `web3.evm.addInputData(inputData)`
 
-Add transaction input data (calldata) as a trace event. This is the hex-encoded data field from a transaction, useful for debugging failed transactions where the calldata is still available even though the transaction reverted.
+Add transaction input data (calldata) as a trace event.
 
 ```typescript
-trace.addTxInputData('0xa9059cbb000000000000000000000000...')
+trace.web3.evm.addInputData('0xa9059cbb000000000000000000000000...')
 ```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `inputData` | `string` | Hex-encoded transaction input data (calldata) |
-
-Returns: `this` for chaining
 
 #### `flush()`
 
@@ -450,7 +426,7 @@ await trace.close('User completed workflow');
 Returns: `Promise<void>`
 
 **Important:** Once a trace is closed:
-- All method calls (`addAttribute`, `addEvent`, `addTag`, `addTxHint`, `addSafeMsgHint`, `addSafeTxHint`, `flush`) will be ignored with a warning
+- All method calls (`addAttribute`, `addEvent`, `addTag`, `web3.evm.addTxHint`, `web3.safe.addMsgHint`, `web3.safe.addTxHint`, `flush`) will be ignored with a warning
 - The keep-alive timer will be stopped
 - A close request will be sent to the server
 
@@ -556,7 +532,7 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
     const receipt = await sendTransaction();
 
     trace.addEvent('transaction_sent', { txHash: receipt.hash })
-         .addTxHint(receipt.hash, 'ethereum');
+         .web3.evm.addTxHint(receipt.hash, 'ethereum');
     // → FlushTrace sent automatically
 
     // Close the trace when done
@@ -594,8 +570,8 @@ async function sendTracedTransaction() {
     });
 
     trace.addEvent('transaction_sent', { txHash: tx.hash })
-         .addTxHint(tx.hash, 'ethereum')
-         .addTxInputData(tx.data);  // record the calldata for debugging
+         .web3.evm.addTxHint(tx.hash, 'ethereum')
+         .web3.evm.addInputData(tx.data);  // record the calldata for debugging
 
     const receipt = await tx.wait();
     trace.addEvent('transaction_confirmed', { blockNumber: receipt.blockNumber });
@@ -702,20 +678,35 @@ For each intercepted transaction, `MiradorProvider`:
 
 ## Chain Utilities
 
-### `chainIdToName(chainId)`
+### `Chain` Enum
 
-Convert a numeric chain ID to a Mirador `ChainName`.
+Supported EVM chains, keyed by chain ID:
 
 ```typescript
-import { chainIdToName } from '@miradorlabs/web-sdk';
+import { Chain } from '@miradorlabs/web-sdk';
 
-chainIdToName(1);     // 'ethereum'
-chainIdToName(137);   // 'polygon'
-chainIdToName(42161); // 'arbitrum'
-chainIdToName(8453);  // 'base'
-chainIdToName(10);    // 'optimism'
-chainIdToName(56);    // 'bsc'
-chainIdToName(999);   // undefined
+Chain.Ethereum  // 1
+Chain.Polygon   // 137
+Chain.Arbitrum  // 42161
+Chain.Base      // 8453
+Chain.Optimism  // 10
+Chain.BSC       // 56
+```
+
+All chain parameters accept `ChainInput` — either a `Chain` enum value or a chain name string (`'ethereum'`, `'polygon'`, etc.).
+
+### `toChain(chainId)`
+
+Convert a raw chain ID to a `Chain` enum value.
+
+```typescript
+import { toChain, Chain } from '@miradorlabs/web-sdk';
+
+toChain(1);     // Chain.Ethereum
+toChain(137);   // Chain.Polygon
+toChain(42161); // Chain.Arbitrum
+toChain('0x1'); // Chain.Ethereum (hex string)
+toChain(999);   // undefined
 ```
 
 ## Automatic Client Metadata Collection
@@ -813,7 +804,8 @@ import {
   captureStackTrace,
   formatStackTrace,
   formatStackTraceReadable,
-  chainIdToName,
+  toChain,
+  Chain,
   getClientMetadata,
   detectBrowser,
   detectOS,
@@ -826,6 +818,7 @@ import {
   StackFrame,               // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,               // { frames: StackFrame[], raw: string }
   ChainName,                // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'
+  ChainInput,               // Chain | ChainName
   TraceEvent,               // { eventName, details?, timestamp }
   TxHashHint,               // { txHash, chain, details?, timestamp }
   SafeTxHintData,           // { safeTxHash, chain, details?, timestamp }
@@ -891,8 +884,8 @@ A complete working example is available in the [`example/`](./example/) director
 - Wallet connection using EIP-6963 (Multi Injected Provider Discovery)
 - Creating and managing traces
 - Adding attributes, tags, and events
-- Blockchain transaction correlation with `addTxHint()`
-- Safe multisig tracking with `addSafeMsgHint()` and `addSafeTxHint()` (optional, commented example)
+- Blockchain transaction correlation with `web3.evm.addTxHint()`
+- Safe multisig tracking with `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
 - Network switching and balance display
 
 To run the example:

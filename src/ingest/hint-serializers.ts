@@ -1,9 +1,9 @@
 /**
  * Hint serializer registry for web SDK (protobuf.js class-based API).
- * Maps hint type strings to functions that serialize hint data into TraceData.
+ * Maps hint type strings to functions that serialize hint data into FlushTraceData.
  */
 import {
-  TraceData,
+  FlushTraceData,
   TxHashHint as TxHashHintProto,
   SafeMsgHint as SafeMsgHintProto,
   SafeTxHint as SafeTxHintProto,
@@ -13,8 +13,8 @@ import { HintType } from '@miradorlabs/plugins';
 import type { HintDataMap } from '@miradorlabs/plugins';
 import { CHAIN_MAP } from './chains';
 
-/** A function that serializes hint data into a TraceData proto message */
-export type HintSerializer = (traceData: TraceData, data: Record<string, unknown>) => void;
+/** A function that serializes hint data into a FlushTraceData proto message */
+export type HintSerializer = (traceData: FlushTraceData, data: Record<string, unknown>) => void;
 
 /** Registry of hint serializers, keyed by hint type string */
 export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
@@ -23,11 +23,14 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hintMsg = new TxHashHintProto();
     hintMsg.setTxHash(hint.txHash);
     hintMsg.setChain(CHAIN_MAP[hint.chain]);
+    hintMsg.setChainId(hint.chain);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);
     hintMsg.setTimestamp(ts);
-    traceData.addTxHashHints(hintMsg);
+    const plugin = new FlushTraceData.Plugin();
+    plugin.setTxHashHints(hintMsg);
+    traceData.addPlugins(plugin);
   },
 
   [HintType.SAFE_MSG]: (traceData, data) => {
@@ -35,11 +38,14 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hintMsg = new SafeMsgHintProto();
     hintMsg.setMessageHash(hint.messageHash);
     hintMsg.setChain(CHAIN_MAP[hint.chain]);
+    hintMsg.setChainId(hint.chain);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);
     hintMsg.setTimestamp(ts);
-    traceData.addSafeMsgHints(hintMsg);
+    const plugin = new FlushTraceData.Plugin();
+    plugin.setSafeMsgHints(hintMsg);
+    traceData.addPlugins(plugin);
   },
 
   [HintType.SAFE_TX]: (traceData, data) => {
@@ -47,10 +53,13 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hintMsg = new SafeTxHintProto();
     hintMsg.setSafeTxHash(hint.safeTxHash);
     hintMsg.setChain(CHAIN_MAP[hint.chain]);
+    hintMsg.setChainId(hint.chain);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);
     hintMsg.setTimestamp(ts);
-    traceData.addSafeTxHints(hintMsg);
+    const plugin = new FlushTraceData.Plugin();
+    plugin.setSafeTxHints(hintMsg);
+    traceData.addPlugins(plugin);
   },
 };

@@ -4,7 +4,7 @@
 import {
   FlushTraceRequest,
   FlushTraceResponse,
-  TraceData,
+  FlushTraceData,
   Attributes,
   Tags,
   Event,
@@ -544,7 +544,7 @@ export class Trace {
 
       const itemCount = eventsToSend.length +
         Object.keys(this.pendingAttributes).length + this.pendingTags.length;
-      const traceData = this.buildTraceData();
+      const traceData = this.buildFlushTraceData();
       this.pendingAttributes = {};
       this.pendingTags = [];
       this.pendingEvents = savedEvents;
@@ -553,7 +553,7 @@ export class Trace {
     } else {
       const itemCount = this.pendingEvents.length +
         Object.keys(this.pendingAttributes).length + this.pendingTags.length;
-      const traceData = this.buildTraceData();
+      const traceData = this.buildFlushTraceData();
       this.clearPending();
       this.enqueueFlush(traceData, itemCount);
     }
@@ -566,7 +566,7 @@ export class Trace {
   /**
    * Enqueue a flush operation onto the flush queue for strict ordering.
    */
-  private enqueueFlush(traceData: TraceData, itemCount: number): void {
+  private enqueueFlush(traceData: FlushTraceData, itemCount: number): void {
     const traceName = this.name;
 
     this.flushQueue = this.flushQueue.then(async () => {
@@ -591,11 +591,11 @@ export class Trace {
   }
 
   /**
-   * Build TraceData from pending state.
+   * Build FlushTraceData from pending state.
    * Plugin onFlush hooks are called to contribute additional data.
    */
-  private buildTraceData(): TraceData {
-    const traceData = new TraceData();
+  private buildFlushTraceData(): FlushTraceData {
+    const traceData = new FlushTraceData();
 
     // Add pending attributes (+ user metadata on first flush)
     const allAttrs = { ...this.pendingAttributes };
@@ -628,6 +628,7 @@ export class Trace {
       if (event.details) {
         eventMsg.setDetails(event.details);
       }
+      eventMsg.setSeverity(Event.Severity.SEVERITY_INFO);
       const ts = new Timestamp();
       ts.fromDate(event.timestamp);
       eventMsg.setTimestamp(ts);
@@ -650,10 +651,10 @@ export class Trace {
   }
 
   /**
-   * Create a FlushBuilder that populates the given TraceData with plugin contributions.
+   * Create a FlushBuilder that populates the given FlushTraceData with plugin contributions.
    * Uses protobuf class-based API for web SDK serialization.
    */
-  private createFlushBuilder(traceData: TraceData): FlushBuilder {
+  private createFlushBuilder(traceData: FlushTraceData): FlushBuilder {
     const logger = this.client.logger;
     return {
       addHint(type: string, data: Record<string, unknown>) {
@@ -668,6 +669,7 @@ export class Trace {
         const eventMsg = new Event();
         eventMsg.setName(event.name);
         if (event.details) eventMsg.setDetails(event.details);
+        eventMsg.setSeverity(Event.Severity.SEVERITY_INFO);
         const ts = new Timestamp();
         ts.fromDate(event.timestamp);
         eventMsg.setTimestamp(ts);
@@ -764,7 +766,7 @@ export class Trace {
   /**
    * Send FlushTrace request (idempotent create-or-update)
    */
-  private async flushTrace(traceData: TraceData, itemCount: number): Promise<void> {
+  private async flushTrace(traceData: FlushTraceData, itemCount: number): Promise<void> {
     const request = new FlushTraceRequest();
     request.setTraceId(this.traceId);
     if (this.name) {
