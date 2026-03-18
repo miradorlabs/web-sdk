@@ -130,6 +130,8 @@ interface ResolvedTraceOptions {
   maxTraceLifetimeMs: number;
   maxQueueSize?: number;
   callbacks?: TraceCallbacks;
+  /** @internal Skip stack trace capture and init event (used by NoopTrace) */
+  _noop?: boolean;
 }
 
 /**
@@ -222,26 +224,27 @@ export class Trace {
     this.maxQueueSize = options.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
     this.callbacks = options.callbacks;
 
-    // Skip 2 frames: this constructor and the trace() method that called it
-    this.creationStackTrace = captureStackTrace(2);
+    if (!options._noop) {
+      // Skip 2 frames: this constructor and the trace() method that called it
+      this.creationStackTrace = captureStackTrace(2);
 
-    // Add trace init event immediately with creation timestamp
-    // This ensures the init event is included in the first flush with the correct timestamp
-    const initDetails: Record<string, unknown> = {};
-    if (this.creationStackTrace) {
-      if (this.creationStackTrace.frames.length > 0) {
-        const topFrame = this.creationStackTrace.frames[0];
-        initDetails.file = topFrame.fileName;
-        initDetails.line = topFrame.lineNumber;
-        initDetails.function = topFrame.functionName;
+      // Add trace init event immediately with creation timestamp
+      const initDetails: Record<string, unknown> = {};
+      if (this.creationStackTrace) {
+        if (this.creationStackTrace.frames.length > 0) {
+          const topFrame = this.creationStackTrace.frames[0];
+          initDetails.file = topFrame.fileName;
+          initDetails.line = topFrame.lineNumber;
+          initDetails.function = topFrame.functionName;
+        }
+        initDetails.stackTrace = this.creationStackTrace.raw;
       }
-      initDetails.stackTrace = this.creationStackTrace.raw;
+      this.pendingEvents.push({
+        eventName: 'trace init',
+        details: JSON.stringify(initDetails),
+        timestamp: this.creationTimestamp,
+      });
     }
-    this.pendingEvents.push({
-      eventName: 'trace init',
-      details: JSON.stringify(initDetails),
-      timestamp: this.creationTimestamp,
-    });
 
     // Set up auto-close on page visibility change if enabled
     if (this.autoClose && typeof document !== 'undefined') {
@@ -757,15 +760,27 @@ export class Trace {
         traceData.addEvents(eventMsg);
       },
       addAttribute(key, value) {
-        const attrsMsg = new Attributes();
-        const attrsMap = attrsMsg.getAttributesMap();
-        attrsMap.set(key, value);
-        traceData.addAttributes(attrsMsg);
+        const existing = traceData.getAttributesList();
+        if (existing.length > 0) {
+          existing[existing.length - 1].getAttributesMap().set(key, value);
+        } else {
+          const attrsMsg = new Attributes();
+          attrsMsg.getAttributesMap().set(key, value);
+          traceData.addAttributes(attrsMsg);
+        }
       },
       addTag(tag) {
-        const tagsMsg = new Tags();
-        tagsMsg.setTagsList([tag]);
-        traceData.addTags(tagsMsg);
+        const existing = traceData.getTagsList();
+        if (existing.length > 0) {
+          existing[existing.length - 1].setTagsList([
+            ...existing[existing.length - 1].getTagsList(),
+            tag,
+          ]);
+        } else {
+          const tagsMsg = new Tags();
+          tagsMsg.setTagsList([tag]);
+          traceData.addTags(tagsMsg);
+        }
       },
     };
   }
@@ -1123,8 +1138,8 @@ export class NoopTrace extends Trace {
       autoKeepAlive: false,
       callTimeoutMs: 0,
       maxTraceLifetimeMs: 0,
+      _noop: true,
     });
-    // Immediately close to prevent any timers or network calls
     this.closed = true;
   }
 

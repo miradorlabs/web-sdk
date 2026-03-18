@@ -47,8 +47,3 @@ export type {
   TraceCallbacks,
 } from './src/ingest';
 
-// Re-export proto types for convenience
-export {
-  FlushTraceRequest,
-  FlushTraceResponse,
-} from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
