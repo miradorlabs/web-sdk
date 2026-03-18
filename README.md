@@ -42,15 +42,15 @@ const client = new Client('your-api-key');
 const trace = client.trace({ name: 'SwapExecution' })
   .addAttribute('from', '0xabc...')
   .addTags(['dex', 'swap'])
-  .addEvent('quote_received');
+  .info('quote_received');
 // → FlushTrace sent after 50ms of inactivity
 
-trace.addEvent('transaction_signed')
+trace.info('transaction_signed')
      .web3.evm.addTxHint('0xtxhash...', 'ethereum');
 // → FlushTrace sent after 50ms of inactivity
 
 // You can still call flush() explicitly to send immediately
-trace.addEvent('confirmed');
+trace.info('confirmed');
 trace.flush();  // → FlushTrace sent immediately
 ```
 
@@ -64,11 +64,11 @@ const client = new Client('your-api-key');
 const trace = client.trace({ name: 'SwapExecution', })
   .addAttribute('from', '0xabc...')
   .addTags(['dex', 'swap'])
-  .addEvent('quote_received');
+  .info('quote_received');
 
 trace.flush();  // → FlushTrace
 
-trace.addEvent('transaction_signed')
+trace.info('transaction_signed')
      .web3.evm.addTxHint('0xtxhash...', 'ethereum');
 
 trace.flush();  // → FlushTrace
@@ -106,7 +106,7 @@ const trace = client.trace({ name: 'UserSession' });
 await trace.close('Session ended');
 
 // All subsequent operations are ignored
-trace.addEvent('ignored');  // Logs warning, does nothing
+trace.info('ignored');  // Logs warning, does nothing
 ```
 
 **Best Practices:**
@@ -121,7 +121,7 @@ try {
   // ... trace user checkout flow ...
   await trace.close('Checkout completed');
 } catch (error) {
-  trace.addEvent('error', { message: error.message });
+  trace.error('error', { message: error.message });
   await trace.close('Checkout failed');
 }
 ```
@@ -250,27 +250,39 @@ trace.addTag('transaction')
      .addTags(['ethereum', 'send'])
 ```
 
-#### `addEvent(name, details?, options?)`
+#### `info(name, details?, options?)` / `warning(...)` / `error(...)`
 
-Add an event with optional details (string or object) and optional settings.
+Record an event with the corresponding severity level. All three share the same signature.
 
 ```typescript
-trace.addEvent('wallet_connected', { wallet: 'MetaMask' })
-     .addEvent('transaction_initiated')
-     .addEvent('transaction_confirmed', { blockNumber: 12345 })
+trace.info('wallet_connected', { wallet: 'MetaMask' })
+     .info('transaction_initiated')
+     .info('transaction_confirmed', { blockNumber: 12345 })
 
-// With stack trace - captures where in your code the event was added
-trace.addEvent('error_occurred', { code: 500 }, { captureStackTrace: true })
+trace.warning('rate_limit', 'approaching limit')
+
+trace.error('processing_failed', { code: 500 })
+
+// With stack trace capture
+trace.error('crash', { code: 500 }, { captureStackTrace: true })
+```
+
+| Parameter | Type               | Description                                      |
+|-----------|--------------------|--------------------------------------------------|
+| `name`    | `string`           | Event name                                       |
+| `details` | `string \| object` | Optional event details (objects are stringified) |
+| `options` | `object`           | Optional settings (e.g. `{ captureStackTrace: true }`) |
+
+#### `addEvent(name, details?, options?)`
+
+Low-level event method. Prefer `info()`, `warning()`, `error()` for clarity.
+
+```typescript
+trace.addEvent('custom_event', 'details', { severity: Severity.Warn })
 
 // Legacy: timestamp can still be passed as third parameter for backward compatibility
 trace.addEvent('custom_event', 'details', new Date())
 ```
-
-| Parameter | Type                       | Description                                         |
-|-----------|----------------------------|-----------------------------------------------------|
-| `name`    | `string`                   | Event name                                          |
-| `details` | `string \| object`         | Optional event details (objects are stringified)    |
-| `options` | `AddEventOptions \| Date`  | Options with `captureStackTrace`, or legacy Date    |
 
 #### `addStackTrace(eventName?, additionalDetails?)`
 
@@ -522,23 +534,23 @@ async function handleWalletTransaction(userAddress: string, recipientAddress: st
     .addAttribute('to', recipientAddress)
     .addAttribute('value', amount)
     .addTags(['transaction', 'send', 'ethereum'])
-    .addEvent('wallet_connected', { wallet: 'MetaMask' });
+    .info('wallet_connected', { wallet: 'MetaMask' });
   // → FlushTrace sent automatically
   // → Keep-alive timer starts automatically
 
-  trace.addEvent('user_signed');
+  trace.info('user_signed');
 
   try {
     const receipt = await sendTransaction();
 
-    trace.addEvent('transaction_sent', { txHash: receipt.hash })
+    trace.info('transaction_sent', { txHash: receipt.hash })
          .web3.evm.addTxHint(receipt.hash, 'ethereum');
     // → FlushTrace sent automatically
 
     // Close the trace when done
     await trace.close('Transaction completed successfully');
   } catch (error) {
-    trace.addEvent('transaction_failed', { error: error.message });
+    trace.error('transaction_failed', { error: error.message });
     await trace.close('Transaction failed');
   }
 }
@@ -569,16 +581,16 @@ async function sendTracedTransaction() {
       data: '0xa9059cbb000000000000000000000000...', // encoded ERC-20 transfer
     });
 
-    trace.addEvent('transaction_sent', { txHash: tx.hash })
+    trace.info('transaction_sent', { txHash: tx.hash })
          .web3.evm.addTxHint(tx.hash, 'ethereum')
          .web3.evm.addInputData(tx.data);  // record the calldata for debugging
 
     const receipt = await tx.wait();
-    trace.addEvent('transaction_confirmed', { blockNumber: receipt.blockNumber });
+    trace.info('transaction_confirmed', { blockNumber: receipt.blockNumber });
     await trace.close('Transfer completed');
   } catch (error) {
     // Even on failure, tx.data may be available from the error or the sent tx
-    trace.addEvent('transaction_failed', { error: error.message });
+    trace.error('transaction_failed', { error: error.message });
     await trace.close('Transfer failed');
   }
 }
@@ -598,7 +610,7 @@ import { Client } from '@miradorlabs/web-sdk';
 const client = new Client('your-api-key');
 const trace = client.trace({ name: 'Checkout' })
   .addAttribute('user', '0xabc...')
-  .addEvent('checkout_started');
+  .info('checkout_started');
 
 // Trace ID is available immediately — no need to wait for flush
 const traceId = trace.getTraceId();
@@ -622,7 +634,7 @@ app.post('/api/process-order', async (req, res) => {
   // Resume the trace — FlushTrace is idempotent, so this adds to the existing trace
   const trace = client.trace({ name: 'ProcessOrder', traceId })
     .addAttribute('step', 'backend')
-    .addEvent('order_processing');
+    .info('order_processing');
   // → auto-flushed via FlushTrace
 
   // ...
@@ -814,7 +826,8 @@ import {
   // Types
   ClientOptions,
   TraceOptions,             // { name?, traceId?, includeUserMeta?, autoClose?, provider?, autoKeepAlive?, maxTraceLifetimeMs?, maxQueueSize?, callbacks?, ... }
-  AddEventOptions,          // { captureStackTrace?: boolean }
+  Severity,                 // Info, Warn, Error
+  AddEventOptions,          // { captureStackTrace?: boolean, severity?: Severity } (for addEvent)
   StackFrame,               // { functionName, fileName, lineNumber, columnNumber }
   StackTrace,               // { frames: StackFrame[], raw: string }
   ChainName,                // 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'

@@ -16,11 +16,24 @@ import {
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import type { TraceEvent, StackTrace, TraceCallbacks } from './types';
+import { Severity } from '@miradorlabs/plugins';
 import type { AddEventOptions, Logger } from '@miradorlabs/plugins';
 import type { MiradorPlugin, TraceContext, FlushBuilder } from '@miradorlabs/plugins';
 import { getClientMetadata } from './metadata';
 import { captureStackTrace } from './stacktrace';
 import { HINT_SERIALIZERS } from './hint-serializers';
+
+/** Map plugins Severity to proto Event.Severity */
+const SEVERITY_MAP: Record<number, Event.Severity> = {
+  [Severity.Info]: Event.Severity.SEVERITY_INFO,
+  [Severity.Warn]: Event.Severity.SEVERITY_WARN,
+  [Severity.Error]: Event.Severity.SEVERITY_ERROR,
+};
+
+function toProtoSeverity(severity?: Severity): Event.Severity {
+  if (severity === undefined) return Event.Severity.SEVERITY_INFO;
+  return SEVERITY_MAP[severity] ?? Event.Severity.SEVERITY_INFO;
+}
 
 /** gRPC status codes that are safe to retry */
 const RETRYABLE_GRPC_CODES = new Set([
@@ -436,9 +449,40 @@ export class Trace {
       eventName,
       details: finalDetails,
       timestamp: timestamp || new Date(),
+      severity: eventOptions?.severity,
     });
     this.scheduleFlush();
     return this;
+  }
+
+  /**
+   * Record an info-level event.
+   * @param name Event name
+   * @param details Optional details (string or object)
+   * @param options Optional settings (e.g. captureStackTrace)
+   */
+  info(name: string, details?: string | object, options?: Omit<AddEventOptions, 'severity'>): this {
+    return this.addEvent(name, details, { ...options, severity: Severity.Info });
+  }
+
+  /**
+   * Record a warning-level event.
+   * @param name Event name
+   * @param details Optional details (string or object)
+   * @param options Optional settings (e.g. captureStackTrace)
+   */
+  warning(name: string, details?: string | object, options?: Omit<AddEventOptions, 'severity'>): this {
+    return this.addEvent(name, details, { ...options, severity: Severity.Warn });
+  }
+
+  /**
+   * Record an error-level event.
+   * @param name Event name
+   * @param details Optional details (string or object)
+   * @param options Optional settings (e.g. captureStackTrace)
+   */
+  error(name: string, details?: string | object, options?: Omit<AddEventOptions, 'severity'>): this {
+    return this.addEvent(name, details, { ...options, severity: Severity.Error });
   }
 
   /**
@@ -628,7 +672,7 @@ export class Trace {
       if (event.details) {
         eventMsg.setDetails(event.details);
       }
-      eventMsg.setSeverity(Event.Severity.SEVERITY_INFO);
+      eventMsg.setSeverity(toProtoSeverity(event.severity));
       const ts = new Timestamp();
       ts.fromDate(event.timestamp);
       eventMsg.setTimestamp(ts);
@@ -669,7 +713,7 @@ export class Trace {
         const eventMsg = new Event();
         eventMsg.setName(event.name);
         if (event.details) eventMsg.setDetails(event.details);
-        eventMsg.setSeverity(Event.Severity.SEVERITY_INFO);
+        eventMsg.setSeverity(toProtoSeverity(event.severity));
         const ts = new Timestamp();
         ts.fromDate(event.timestamp);
         eventMsg.setTimestamp(ts);

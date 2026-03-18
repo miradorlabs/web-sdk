@@ -5,7 +5,7 @@ export { Client, Trace, NoopTrace, MiradorProvider } from './src/ingest';
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
 
 // Chain utilities
-export { toChain, Chain } from './src/ingest';
+export { toChain, Chain, Severity } from './src/ingest';
 
 // Plugin system
 export { Web3Plugin } from './src/ingest';
