@@ -103,7 +103,7 @@ export async function sendTransaction(): Promise<void> {
     trace.addTags(traceState.tags);
 
     // Add event: transaction initiated
-    trace.addEvent('transaction_initiated', {
+    trace.info('transaction_initiated', {
       from: walletState.address || '',
       to: recipient,
       value: amount,
@@ -147,7 +147,7 @@ export async function sendTransaction(): Promise<void> {
     showStatus('Transaction sent! Waiting for confirmation...', 'pending', 0);
 
     // Add event: transaction sent
-    trace.addEvent('transaction_sent', { txHash });
+    trace.info('transaction_sent', { txHash });
 
     // Show trace info
     elements.traceInfo?.classList.remove('hidden');
@@ -198,7 +198,7 @@ export async function sendTransaction(): Promise<void> {
       showStatus('Transaction cancelled', 'info');
 
       if (traceState.currentTrace) {
-        traceState.currentTrace.addEvent('transaction_rejected', { reason: 'User rejected' });
+        traceState.currentTrace.warning('transaction_rejected', { reason: 'User rejected' });
         await traceState.currentTrace.close('Transaction rejected by user');
         traceState.currentTrace = null;
       }
@@ -207,7 +207,7 @@ export async function sendTransaction(): Promise<void> {
       showStatus(`Transaction failed: ${err.message}`, 'error');
 
       if (traceState.currentTrace) {
-        traceState.currentTrace.addEvent('transaction_error', { error: err.message });
+        traceState.currentTrace.error('transaction_error', { error: err.message });
         await traceState.currentTrace.close(`Transaction error: ${err.message}`);
         traceState.currentTrace = null;
       }
@@ -252,7 +252,7 @@ async function waitForConfirmation(tx: { hash: string; wait: () => Promise<{ sta
       const closeReason = success
         ? `Transaction confirmed in block ${blockNumber}`
         : 'Transaction failed on-chain';
-      traceState.currentTrace.addEvent('transaction_confirmed', {
+      traceState.currentTrace.info('transaction_confirmed', {
         success,
         blockNumber,
         txHash,
@@ -282,7 +282,7 @@ async function waitForConfirmation(tx: { hash: string; wait: () => Promise<{ sta
     showStatus(`Transaction failed: ${err.message}`, 'error');
 
     if (traceState.currentTrace) {
-      traceState.currentTrace.addEvent('confirmation_error', { txHash, error: err.message });
+      traceState.currentTrace.error('confirmation_error', { txHash, error: err.message });
       await traceState.currentTrace.close(`Confirmation error: ${err.message}`);
       traceState.currentTrace = null;
     }
