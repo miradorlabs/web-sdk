@@ -11,11 +11,10 @@ const app = express();
 const PORT = 3002;
 
 // Target Mirador Gateway
-const GATEWAY_URL_STAGING = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
-// const GATEWAY_URL_STAGING = 'https://ingest-gateway-dev.mirador.org:443';
-// const GATEWAY_URL_PROD = 'https://ingest.mirador.org:443';
-const GATEWAY_URL_PROD = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
-const GATEWAY_URL = process.env.MIRADOR_GATEWAY === 'staging' ? GATEWAY_URL_STAGING : GATEWAY_URL_PROD;
+// const GATEWAY_URL_STAGING = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
+const GATEWAY_URL_PROD = 'https://ingest.mirador.org:443';
+// const GATEWAY_URL_PROD = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
+const GATEWAY_URL = GATEWAY_URL_PROD;
 // Enable CORS for all origins (development only)
 app.use(cors({
   origin: '*',
