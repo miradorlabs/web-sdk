@@ -2,7 +2,7 @@
 // API Key Functions
 // ============================================================================
 
-import { Client } from '@miradorlabs/web-sdk';
+import { Client, Web3Plugin } from '@miradorlabs/web-sdk';
 import { GATEWAY_URL } from './config.js';
 import { elements, setMiradorClient, setApiKey } from './state.js';
 import { log, showStatus } from './utils.js';
@@ -23,7 +23,7 @@ export function saveApiKey(): void {
   }
 
   setApiKey(key);
-  setMiradorClient(new Client(key, { apiUrl: GATEWAY_URL }));
+  setMiradorClient(new Client(key, { apiUrl: GATEWAY_URL, plugins: [Web3Plugin()] }));
 
   // Update UI
   elements.apiKeyInput.disabled = true;

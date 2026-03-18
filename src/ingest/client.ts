@@ -10,6 +10,7 @@ import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { Trace, NoopTrace } from './trace';
 import type { ClientOptions, TraceOptions, Logger, TraceCallbacks } from './types';
+import type { MiradorPlugin, MergedPluginMethods } from '@miradorlabs/plugins';
 
 /**
  * Generate a W3C-compatible trace ID (32 lowercase hex chars / 128 bits)
@@ -44,15 +45,17 @@ const CONSOLE_LOGGER: Logger = {
 };
 
 /**
- * Main Client for interacting with Mirador's Ingest Gateway API
+ * Main Client for interacting with Mirador's Ingest Gateway API.
+ *
+ * @template P Array of plugins registered with this client. Plugin methods
+ *   are merged onto every Trace created via `trace()`.
  */
-export class Client {
+export class Client<P extends readonly MiradorPlugin<object>[] = []> {
   public apiUrl: string;
   public apiKey: string;
   public keepAliveIntervalMs: number;
   private callTimeoutMs: number;
   private client: IngestGatewayServiceClient;
-  private provider?: import('./types').EIP1193Provider;
 
   /** @internal */ readonly logger: Logger;
   /** @internal */ readonly callbacks?: TraceCallbacks;
@@ -60,24 +63,25 @@ export class Client {
 
   private sampleRate: number;
   private sampler?: (options: TraceOptions) => boolean;
+  private plugins: P;
 
   /**
    * Create a new Client instance
    * @param apiKey Required API key for authentication (sent as x-ingest-api-key header)
    * @param options Optional configuration options
    */
-  constructor(apiKey: string, options?: ClientOptions) {
+  constructor(apiKey: string, options?: ClientOptions & { plugins?: [...P] }) {
     this.apiKey = apiKey;
     this.apiUrl = options?.apiUrl || DEFAULT_API_URL;
     this.keepAliveIntervalMs = options?.keepAliveIntervalMs ?? DEFAULT_KEEP_ALIVE_INTERVAL_MS;
     this.callTimeoutMs = options?.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-    this.provider = options?.provider;
     this.callbacks = options?.callbacks;
     this.sampleRate = options?.sampleRate ?? 1;
     if (this.sampleRate < 0 || this.sampleRate > 1) {
       throw new Error('sampleRate must be between 0 and 1');
     }
     this.sampler = options?.sampler;
+    this.plugins = (options?.plugins ?? []) as unknown as P;
 
     // Configure logger: custom > debug console > noop
     if (options?.logger) {
@@ -117,25 +121,29 @@ export class Client {
    * Create a new trace builder
    *
    * @param options Trace configuration options
-   * @returns A Trace builder instance (or NoopTrace if sampled out)
+   * @returns A Trace builder instance (or NoopTrace if sampled out), with plugin methods merged
    */
-  trace(options?: TraceOptions): Trace {
+  trace(options?: TraceOptions): Trace & MergedPluginMethods<[...P], Trace> {
     // Sampling: check if this trace should be sampled out
     const traceOptions = options ?? {};
     if (this.sampler) {
       if (!this.sampler(traceOptions)) {
-        return new NoopTrace();
+        const noop = new NoopTrace();
+        noop._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
+        return noop as Trace & MergedPluginMethods<[...P], Trace>;
       }
     } else if (this.sampleRate < 1) {
       if (Math.random() >= this.sampleRate) {
-        return new NoopTrace();
+        const noop = new NoopTrace();
+        noop._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
+        return noop as Trace & MergedPluginMethods<[...P], Trace>;
       }
     }
 
     // Generate a W3C trace ID (32 hex chars) if not provided
     const traceId = traceOptions.traceId ?? generateTraceId();
 
-    return new Trace(this, {
+    const trace = new Trace(this, {
       name: traceOptions.name,
       traceId,
       includeUserMeta: traceOptions.includeUserMeta ?? DEFAULT_INCLUDE_USER_META,
@@ -143,12 +151,14 @@ export class Client {
       retryBackoff: traceOptions.retryBackoff ?? DEFAULT_RETRY_BACKOFF,
       keepAliveIntervalMs: this.keepAliveIntervalMs,
       autoClose: traceOptions.autoClose ?? DEFAULT_AUTO_CLOSE,
-      provider: traceOptions.provider ?? this.provider,
       autoKeepAlive: traceOptions.autoKeepAlive ?? !traceOptions.traceId,
       callTimeoutMs: this.callTimeoutMs,
       maxTraceLifetimeMs: traceOptions.maxTraceLifetimeMs ?? 0,
       maxQueueSize: traceOptions.maxQueueSize,
       callbacks: traceOptions.callbacks ?? this.callbacks,
     });
+
+    trace._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
+    return trace as Trace & MergedPluginMethods<[...P], Trace>;
   }
 }

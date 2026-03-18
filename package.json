@@ -51,9 +51,10 @@
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
+    "@miradorlabs/plugins": "1.0.0",
     "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
-    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.6.tgz",
+    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.7.tgz",
     "rxjs": "^7.8.2"
   },
   "author": "@mirador",

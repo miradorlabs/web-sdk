@@ -1,9 +1,30 @@
 // Mirador Client and Mirador Trace Unit Tests
-import { Client, Trace, captureStackTrace, chainIdToName, MiradorProvider } from '../src/ingest';
-import type { StackTrace, EIP1193Provider, TransactionRequest } from '../src/ingest';
+import { Client, Trace, captureStackTrace, toChain, Chain, MiradorProvider, Web3Plugin } from '../src/ingest';
+import type { StackTrace, EIP1193Provider, TransactionRequest, MiradorPlugin, Web3Methods } from '../src/ingest';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { FlushTraceRequest, Chain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
+
+// Helper to extract tx hash hints from FlushTraceData plugins
+function getTxHashHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getTxHashHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
+
+// Helper to extract safe msg hints from FlushTraceData plugins
+function getSafeMsgHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getSafeMsgHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getSafeTxHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getSafeTxHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
 
 // Mock the gRPC-Web client
 jest.mock('mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
@@ -96,7 +117,7 @@ describe('Client', () => {
 });
 
 describe('Trace', () => {
-  let client: Client;
+  let client: Client<[MiradorPlugin<Web3Methods>]>;
   let mockFlushTrace: jest.Mock;
 
   beforeEach(() => {
@@ -112,7 +133,7 @@ describe('Trace', () => {
       flushTrace: mockFlushTrace,
     }));
 
-    client = new Client('test-api-key');
+    client = new Client('test-api-key', { plugins: [Web3Plugin()] });
   });
 
   describe('builder methods (chaining)', () => {
@@ -143,7 +164,7 @@ describe('Trace', () => {
 
     it('addTxHint() should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.addTxHint('0x123', 'ethereum')).toBe(trace);
+      expect(trace.web3.evm.addTxHint('0x123', 'ethereum')).toBe(trace);
     });
 
     it('should support fluent API pattern', () => {
@@ -153,7 +174,7 @@ describe('Trace', () => {
         .addTag('transaction')
         .addTags(['ethereum'])
         .addEvent('started')
-        .addTxHint('0x123', 'ethereum');
+        .web3.evm.addTxHint('0x123', 'ethereum');
 
       expect(trace).toBeInstanceOf(Trace);
     });
@@ -222,20 +243,20 @@ describe('Trace', () => {
 
     it('should include txHashHints in TraceData', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xabc123', 'ethereum')
-        .addTxHint('0xdef456', 'polygon');
+        .web3.evm.addTxHint('0xabc123', 'ethereum')
+        .web3.evm.addTxHint('0xdef456', 'polygon');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
-      const hints = data!.getTxHashHintsList();
+      const hints = getTxHashHints(data!);
       expect(hints.length).toBe(2);
       expect(hints[0].getTxHash()).toBe('0xabc123');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[1].getTxHash()).toBe('0xdef456');
-      expect(hints[1].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[1].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
     });
 
     it('should have traceId set immediately (auto-generated)', () => {
@@ -252,13 +273,13 @@ describe('Trace', () => {
   describe('addTxInputData', () => {
     it('should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.addTxInputData('0x1234')).toBe(trace);
+      expect(trace.web3.evm.addInputData('0x1234')).toBe(trace);
     });
 
     it('should add an event with the correct name and input data', async () => {
       const inputData = '0xa9059cbb0000000000000000000000001234567890abcdef';
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxInputData(inputData);
+        .web3.evm.addInputData(inputData);
 
       trace.flush();
       await flushPromises();
@@ -275,8 +296,8 @@ describe('Trace', () => {
     it('should work alongside other builder methods', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
         .addAttribute('wallet', '0xabc')
-        .addTxHint('0x123', 'ethereum')
-        .addTxInputData('0xa9059cbb00000000')
+        .web3.evm.addTxHint('0x123', 'ethereum')
+        .web3.evm.addInputData('0xa9059cbb00000000')
         .addTag('bridge');
 
       trace.flush();
@@ -286,7 +307,7 @@ describe('Trace', () => {
       const data = request.getData();
       const attrsMap = data!.getAttributesList()[0].getAttributesMap();
       expect(attrsMap.get('wallet')).toBe('0xabc');
-      expect(data!.getTxHashHintsList().length).toBe(1);
+      expect(getTxHashHints(data!).length).toBe(1);
       expect(data!.getTagsList()[0].getTagsList()).toContain('bridge');
 
       // Events: trace init + tx input data
@@ -434,7 +455,7 @@ describe('Trace', () => {
       trace.addAttribute('key', 'value');
       trace.addTag('tag1');
       trace.addEvent('event1');
-      trace.addTxHint('0x123', 'ethereum');
+      trace.web3.evm.addTxHint('0x123', 'ethereum');
 
       expect(mockFlushTrace).not.toHaveBeenCalled();
 
@@ -449,7 +470,7 @@ describe('Trace', () => {
       expect(data!.getTagsList().length).toBe(1);
       // Events: 1 for trace init + 1 user event
       expect(data!.getEventsList().length).toBe(2);
-      expect(data!.getTxHashHintsList().length).toBe(1);
+      expect(getTxHashHints(data!).length).toBe(1);
     });
 
     it('should flush immediately when flush() is called manually', async () => {
@@ -505,19 +526,19 @@ describe('Trace', () => {
   describe('addTxHint with TxHintOptions', () => {
     it('should accept string details (backwards compatible)', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xabc', 'ethereum', 'simple string');
+        .web3.evm.addTxHint('0xabc', 'ethereum', 'simple string');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('simple string');
     });
 
     it('should accept TxHintOptions with input', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xabc', 'ethereum', { input: '0xa9059cbb...' });
+        .web3.evm.addTxHint('0xabc', 'ethereum', { input: '0xa9059cbb...' });
 
       trace.flush();
       await flushPromises();
@@ -531,7 +552,7 @@ describe('Trace', () => {
 
     it('should accept TxHintOptions with input and details', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xabc', 'ethereum', { input: '0xa9059cbb...', details: 'swap' });
+        .web3.evm.addTxHint('0xabc', 'ethereum', { input: '0xa9059cbb...', details: 'swap' });
 
       trace.flush();
       await flushPromises();
@@ -541,7 +562,7 @@ describe('Trace', () => {
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
       expect(inputEvent!.getDetails()).toBe('0xa9059cbb...');
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('swap');
     });
   });
@@ -549,58 +570,58 @@ describe('Trace', () => {
   describe('addSafeMsgHint', () => {
     it('should add a safe message hint with chain and message hash', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeMsgHint('0xmsgHash123', 'ethereum');
+        .web3.safe.addMsgHint('0xmsgHash123', 'ethereum');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getSafeMsgHintsList();
+      const hints = getSafeMsgHints(request.getData()!);
       expect(hints).toHaveLength(1);
       expect(hints[0].getMessageHash()).toBe('0xmsgHash123');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
     });
 
     it('should add a safe message hint with details', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeMsgHint('0xmsgHash456', 'polygon', 'multisig approval');
+        .web3.safe.addMsgHint('0xmsgHash456', 'polygon', 'multisig approval');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getSafeMsgHintsList();
+      const hints = getSafeMsgHints(request.getData()!);
       expect(hints[0].getMessageHash()).toBe('0xmsgHash456');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
       expect(hints[0].getDetails()).toBe('multisig approval');
     });
 
     it('should support multiple safe message hints', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addSafeMsgHint('0xmsg1', 'ethereum')
-        .addSafeMsgHint('0xmsg2', 'base', 'second hint');
+        .web3.safe.addMsgHint('0xmsg1', 'ethereum')
+        .web3.safe.addMsgHint('0xmsg2', 'base', 'second hint');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getSafeMsgHintsList();
+      const hints = getSafeMsgHints(request.getData()!);
       expect(hints).toHaveLength(2);
       expect(hints[0].getMessageHash()).toBe('0xmsg1');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[1].getMessageHash()).toBe('0xmsg2');
-      expect(hints[1].getChain()).toBe(Chain.CHAIN_BASE);
+      expect(hints[1].getChain()).toBe(ProtoChain.CHAIN_BASE);
       expect(hints[1].getDetails()).toBe('second hint');
     });
 
     it('should handle different chain names', async () => {
-      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: Chain }> = [
-        { chain: 'ethereum', expected: Chain.CHAIN_ETHEREUM },
-        { chain: 'polygon', expected: Chain.CHAIN_POLYGON },
-        { chain: 'arbitrum', expected: Chain.CHAIN_ARBITRUM },
-        { chain: 'base', expected: Chain.CHAIN_BASE },
-        { chain: 'optimism', expected: Chain.CHAIN_OPTIMISM },
-        { chain: 'bsc', expected: Chain.CHAIN_BSC },
+      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: ProtoChain }> = [
+        { chain: 'ethereum', expected: ProtoChain.CHAIN_ETHEREUM },
+        { chain: 'polygon', expected: ProtoChain.CHAIN_POLYGON },
+        { chain: 'arbitrum', expected: ProtoChain.CHAIN_ARBITRUM },
+        { chain: 'base', expected: ProtoChain.CHAIN_BASE },
+        { chain: 'optimism', expected: ProtoChain.CHAIN_OPTIMISM },
+        { chain: 'bsc', expected: ProtoChain.CHAIN_BSC },
       ];
 
       for (const { chain, expected } of chainTests) {
@@ -612,20 +633,20 @@ describe('Trace', () => {
         });
 
         const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-          .addSafeMsgHint('0xmsg', chain);
+          .web3.safe.addMsgHint('0xmsg', chain);
 
         trace.flush();
         await flushPromises();
 
         const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-        const hints = request.getData()!.getSafeMsgHintsList();
+        const hints = getSafeMsgHints(request.getData()!);
         expect(hints[0].getChain()).toBe(expected);
       }
     });
 
     it('should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.addSafeMsgHint('0xmsg', 'ethereum')).toBe(trace);
+      expect(trace.web3.safe.addMsgHint('0xmsg', 'ethereum')).toBe(trace);
     });
 
     it('should work alongside txHashHints and other builder methods', async () => {
@@ -633,15 +654,15 @@ describe('Trace', () => {
         .addAttribute('safe_address', '0x1234')
         .addTag('multisig')
         .addEvent('proposed', 'token transfer')
-        .addTxHint('0xtx123', 'ethereum')
-        .addSafeMsgHint('0xmsg123', 'ethereum', 'approval');
+        .web3.evm.addTxHint('0xtx123', 'ethereum')
+        .web3.safe.addMsgHint('0xmsg123', 'ethereum', 'approval');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      expect(request.getData()!.getTxHashHintsList()).toHaveLength(1);
-      const safeMsgHints = request.getData()!.getSafeMsgHintsList();
+      expect(getTxHashHints(request.getData()!)).toHaveLength(1);
+      const safeMsgHints = getSafeMsgHints(request.getData()!);
       expect(safeMsgHints).toHaveLength(1);
       expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
       expect(safeMsgHints[0].getDetails()).toBe('approval');
@@ -651,20 +672,20 @@ describe('Trace', () => {
   describe('addTx', () => {
     it('should extract hash and chain from TransactionLike', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTx({ hash: '0xabc', chainId: 1 });
+        .web3.evm.addTx({ hash: '0xabc', chainId: 1 });
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints[0].getTxHash()).toBe('0xabc');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
     });
 
     it('should extract input data from tx.data (ethers v5 style)', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTx({ hash: '0xabc', chainId: 1, data: '0xa9059cbb...' });
+        .web3.evm.addTx({ hash: '0xabc', chainId: 1, data: '0xa9059cbb...' });
 
       trace.flush();
       await flushPromises();
@@ -678,14 +699,14 @@ describe('Trace', () => {
 
     it('should extract input data from tx.input (ethers v6 / viem style)', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTx({ hash: '0xabc', chainId: 137, input: '0xdeadbeef' });
+        .web3.evm.addTx({ hash: '0xabc', chainId: 137, input: '0xdeadbeef' });
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      const hints = getTxHashHints(request.getData()!);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
@@ -694,19 +715,19 @@ describe('Trace', () => {
 
     it('should accept explicit chain parameter over chainId', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTx({ hash: '0xabc', chainId: 1 }, 'polygon');
+        .web3.evm.addTx({ hash: '0xabc', chainId: 1 }, 'polygon');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      const hints = getTxHashHints(request.getData()!);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
     });
 
     it('should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.addTx({ hash: '0xabc', chainId: 1 })).toBe(trace);
+      expect(trace.web3.evm.addTx({ hash: '0xabc', chainId: 1 })).toBe(trace);
     });
   });
 
@@ -725,19 +746,19 @@ describe('Trace', () => {
 
     it('setProvider should return this for chaining', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.setProvider(mockProvider)).toBe(trace);
+      expect(trace.web3.evm.setProvider(mockProvider)).toBe(trace);
     });
 
     it('setProvider should cache chain ID from provider', async () => {
       const trace = client.trace({ name: 'TestTrace' });
-      trace.setProvider(mockProvider);
+      trace.web3.evm.setProvider(mockProvider);
       await flushPromises();
-      expect(trace.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('sendTransaction should send tx and capture events', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(mockProvider);
+      trace.web3.evm.setProvider(mockProvider);
       await flushPromises(); // wait for chain ID resolution
 
       const txRequest: TransactionRequest = {
@@ -748,7 +769,7 @@ describe('Trace', () => {
         chainId: 1,
       };
 
-      const txHash = await trace.sendTransaction(txRequest);
+      const txHash = await trace.web3.evm.sendTransaction(txRequest);
       expect(txHash).toBe('0xtxhash123');
 
       expect(mockProvider.request).toHaveBeenCalledWith(
@@ -759,8 +780,8 @@ describe('Trace', () => {
     it('sendTransaction should throw if no provider', async () => {
       const trace = client.trace({ name: 'TestTrace' });
       await expect(
-        trace.sendTransaction({ from: '0x1' })
-      ).rejects.toThrow('[MiradorTrace] No provider configured');
+        trace.web3.evm.sendTransaction({ from: '0x1' })
+      ).rejects.toThrow('[Web3Plugin] No provider configured');
     });
 
     it('sendTransaction should capture error events on failure', async () => {
@@ -773,18 +794,18 @@ describe('Trace', () => {
       };
 
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(errorProvider);
+      trace.web3.evm.setProvider(errorProvider);
       await flushPromises();
 
       await expect(
-        trace.sendTransaction({ from: '0x1', chainId: 1 })
+        trace.web3.evm.sendTransaction({ from: '0x1', chainId: 1 })
       ).rejects.toThrow('User rejected');
     });
 
     it('sendTransaction should accept provider as parameter', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
 
-      const txHash = await trace.sendTransaction(
+      const txHash = await trace.web3.evm.sendTransaction(
         { from: '0xsender', chainId: 1 },
         mockProvider
       );
@@ -795,12 +816,12 @@ describe('Trace', () => {
   describe('resolveChain', () => {
     it('should prefer explicit chain parameter', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.resolveChain('polygon', 1)).toBe('polygon');
+      expect(trace.web3.evm.resolveChain('polygon', 1)).toBe(Chain.Polygon);
     });
 
     it('should fall back to chainId', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.resolveChain(undefined, 137)).toBe('polygon');
+      expect(trace.web3.evm.resolveChain(undefined, 137)).toBe(Chain.Polygon);
     });
 
     it('should fall back to provider chain', async () => {
@@ -808,14 +829,14 @@ describe('Trace', () => {
         request: jest.fn().mockResolvedValue('0x1'),
       };
       const trace = client.trace({ name: 'TestTrace' });
-      trace.setProvider(mockProvider);
+      trace.web3.evm.setProvider(mockProvider);
       await flushPromises();
-      expect(trace.resolveChain()).toBe('ethereum');
+      expect(trace.web3.evm.resolveChain()).toBe(Chain.Ethereum);
     });
 
     it('should throw if chain cannot be determined', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(() => trace.resolveChain()).toThrow('[MiradorTrace] Cannot determine chain');
+      expect(() => trace.web3.evm.resolveChain()).toThrow('[Web3Plugin] Cannot determine chain');
     });
   });
 
@@ -850,48 +871,48 @@ describe('Trace', () => {
 
     it('addTxHint with no options produces correct proto', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xhash', 'ethereum');
+        .web3.evm.addTxHint('0xhash', 'ethereum');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[0].getDetails()).toBeFalsy();
     });
 
     it('addTxHint with string details produces raw string details', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xhash', 'ethereum', 'swap tx');
+        .web3.evm.addTxHint('0xhash', 'ethereum', 'swap tx');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('swap tx');
     });
 
     it('addTxHint with undefined options produces no details', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxHint('0xhash', 'base', undefined);
+        .web3.evm.addTxHint('0xhash', 'base', undefined);
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = request.getData()!.getTxHashHintsList();
+      const hints = getTxHashHints(request.getData()!);
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_BASE);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_BASE);
       expect(hints[0].getDetails()).toBeFalsy();
     });
 
     it('addTxInputData still works', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .addTxInputData('0xabcd');
+        .web3.evm.addInputData('0xabcd');
 
       trace.flush();
       await flushPromises();
@@ -909,8 +930,8 @@ describe('Trace', () => {
         .addAttribute('user', '0x1')
         .addTag('dex')
         .addEvent('started', 'details')
-        .addTxHint('0xhash', 'ethereum', 'swap tx')
-        .addTxInputData('0xdata');
+        .web3.evm.addTxHint('0xhash', 'ethereum', 'swap tx')
+        .web3.evm.addInputData('0xdata');
 
       trace.flush();
       await flushPromises();
@@ -938,10 +959,10 @@ describe('Trace', () => {
       expect(events[2].getDetails()).toBe('0xdata');
 
       // Tx hints with raw string details
-      const hints = data.getTxHashHintsList();
+      const hints = getTxHashHints(data);
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[0].getDetails()).toBe('swap tx');
     });
 
@@ -991,7 +1012,7 @@ describe('Trace', () => {
       trace.addAttribute('b', '2');
       trace.addTag('ignored');
       trace.addEvent('ignored');
-      trace.addTxHint('0x', 'ethereum');
+      trace.web3.evm.addTxHint('0x', 'ethereum');
       trace.flush();
 
       // setProvider should still work (it doesn't check closed)
@@ -1010,7 +1031,7 @@ describe('Trace', () => {
         keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
         closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
       }));
-      client = new Client('test-api-key');
+      client = new Client('test-api-key', { plugins: [Web3Plugin()] });
     });
 
     // Use fake timers to prevent keep-alive intervals from causing test timeouts
@@ -1289,27 +1310,32 @@ describe('Trace', () => {
     });
 
     it('provider from ClientOptions flows to trace', async () => {
-      const clientWithProvider = new Client('test-key', { provider: ethProvider });
+      const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
       const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
-    it('provider from TraceOptions overrides ClientOptions', async () => {
-      const clientWithProvider = new Client('test-key', { provider: ethProvider });
-      const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false, provider: polygonProvider });
+    it('setProvider overrides plugin provider', async () => {
+      const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
+      const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.getProviderChain()).toBe('polygon');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
+
+      trace.web3.evm.setProvider(polygonProvider);
+      await flushPromises();
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Polygon);
     });
 
-    it('setProvider overrides TraceOptions provider', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false, provider: polygonProvider });
+    it('setProvider overrides initial plugin provider', async () => {
+      const clientWithPoly = new Client('test-key', { plugins: [Web3Plugin({ provider: polygonProvider })] });
+      const trace = clientWithPoly.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.getProviderChain()).toBe('polygon');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Polygon);
 
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
-      expect(trace.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('setProvider with failing eth_chainId leaves providerChain null', async () => {
@@ -1318,10 +1344,10 @@ describe('Trace', () => {
       };
 
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(failingProvider);
+      trace.web3.evm.setProvider(failingProvider);
       await flushPromises();
 
-      expect(trace.getProviderChain()).toBeNull();
+      expect(trace.web3.evm.getProviderChain()).toBeNull();
     });
 
     it('setProvider with unknown chain ID leaves providerChain null', async () => {
@@ -1333,18 +1359,18 @@ describe('Trace', () => {
       };
 
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(unknownChainProvider);
+      trace.web3.evm.setProvider(unknownChainProvider);
       await flushPromises();
 
-      expect(trace.getProviderChain()).toBeNull();
+      expect(trace.web3.evm.getProviderChain()).toBeNull();
     });
 
     it('sendTransaction serializes bigint values correctly', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      await trace.sendTransaction({
+      await trace.web3.evm.sendTransaction({
         from: '0xsender',
         to: '0xreceiver',
         value: BigInt('1000000000000000000'),
@@ -1365,10 +1391,10 @@ describe('Trace', () => {
 
     it('sendTransaction captures tx:send event', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      await trace.sendTransaction({
+      await trace.web3.evm.sendTransaction({
         from: '0xsender',
         to: '0xreceiver',
         data: '0xa9059cbb0000000000',
@@ -1397,10 +1423,10 @@ describe('Trace', () => {
 
     it('sendTransaction captures tx:sent event with hash', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      const txHash = await trace.sendTransaction({
+      const txHash = await trace.web3.evm.sendTransaction({
         from: '0xsender',
         to: '0xreceiver',
         chainId: 1,
@@ -1437,11 +1463,11 @@ describe('Trace', () => {
       };
 
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(errorProvider);
+      trace.web3.evm.setProvider(errorProvider);
       await flushPromises();
 
       await expect(
-        trace.sendTransaction({ from: '0xsender', chainId: 1 })
+        trace.web3.evm.sendTransaction({ from: '0xsender', chainId: 1 })
       ).rejects.toThrow('user rejected');
 
       trace.flush();
@@ -1472,11 +1498,11 @@ describe('Trace', () => {
       };
 
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(errorProvider);
+      trace.web3.evm.setProvider(errorProvider);
       await flushPromises();
 
       try {
-        await trace.sendTransaction({ from: '0xsender', chainId: 1 });
+        await trace.web3.evm.sendTransaction({ from: '0xsender', chainId: 1 });
         fail('should have thrown');
       } catch (err) {
         expect(err).toBe(originalError);
@@ -1485,11 +1511,11 @@ describe('Trace', () => {
 
     it('multiple sendTransaction calls on same trace produce all events', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      await trace.sendTransaction({ from: '0xsender', to: '0xreceiverA', chainId: 1 });
-      await trace.sendTransaction({ from: '0xsender', to: '0xreceiverB', chainId: 1 });
+      await trace.web3.evm.sendTransaction({ from: '0xsender', to: '0xreceiverA', chainId: 1 });
+      await trace.web3.evm.sendTransaction({ from: '0xsender', to: '0xreceiverB', chainId: 1 });
 
       trace.flush();
       await flushPromises();
@@ -1508,10 +1534,10 @@ describe('Trace', () => {
 
     it('sendTransaction with data longer than 10 chars truncates in tx:send event', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      await trace.sendTransaction({
+      await trace.web3.evm.sendTransaction({
         from: '0xsender',
         to: '0xreceiver',
         data: '0xa9059cbb000000000000000000000000abcdef',
@@ -1536,10 +1562,10 @@ describe('Trace', () => {
 
     it('sendTransaction with no data field has undefined data in tx:send event', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      trace.setProvider(ethProvider);
+      trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
 
-      await trace.sendTransaction({
+      await trace.web3.evm.sendTransaction({
         from: '0xsender',
         to: '0xreceiver',
         chainId: 1,
@@ -1562,35 +1588,35 @@ describe('Trace', () => {
   });
 });
 
-describe('chainIdToName', () => {
+describe('toChain', () => {
   it('should map known chain IDs', () => {
-    expect(chainIdToName(1)).toBe('ethereum');
-    expect(chainIdToName(137)).toBe('polygon');
-    expect(chainIdToName(42161)).toBe('arbitrum');
-    expect(chainIdToName(8453)).toBe('base');
-    expect(chainIdToName(10)).toBe('optimism');
-    expect(chainIdToName(56)).toBe('bsc');
+    expect(toChain(1)).toBe(Chain.Ethereum);
+    expect(toChain(137)).toBe(Chain.Polygon);
+    expect(toChain(42161)).toBe(Chain.Arbitrum);
+    expect(toChain(8453)).toBe(Chain.Base);
+    expect(toChain(10)).toBe(Chain.Optimism);
+    expect(toChain(56)).toBe(Chain.BSC);
   });
 
   it('should return undefined for unknown chain IDs', () => {
-    expect(chainIdToName(999999)).toBeUndefined();
+    expect(toChain(999999)).toBeUndefined();
   });
 
   it('should handle bigint input', () => {
-    expect(chainIdToName(BigInt(1))).toBe('ethereum');
+    expect(toChain(BigInt(1))).toBe(Chain.Ethereum);
   });
 
   it('should handle string input', () => {
-    expect(chainIdToName('137')).toBe('polygon');
+    expect(toChain('137')).toBe(Chain.Polygon);
   });
 
   it('should handle hex string input', () => {
-    expect(chainIdToName('0x1')).toBe('ethereum');
+    expect(toChain('0x1')).toBe(Chain.Ethereum);
   });
 });
 
 describe('MiradorProvider', () => {
-  let mockClient: Client;
+  let mockClient: Client<[MiradorPlugin<Web3Methods>]>;
   let mockFlushTrace: jest.Mock;
   let mockUnderlying: EIP1193Provider;
 
@@ -1607,7 +1633,7 @@ describe('MiradorProvider', () => {
       flushTrace: mockFlushTrace,
     }));
 
-    mockClient = new Client('test-api-key');
+    mockClient = new Client('test-api-key', { plugins: [Web3Plugin()] });
 
     mockUnderlying = {
       request: jest.fn().mockImplementation(async (args) => {
