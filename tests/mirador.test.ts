@@ -1,8 +1,8 @@
 // Mirador Client and Mirador Trace Unit Tests
-import { Client, Trace, captureStackTrace, chainIdToName, MiradorProvider, Web3Plugin } from '../src/ingest';
+import { Client, Trace, captureStackTrace, toChain, Chain, MiradorProvider, Web3Plugin } from '../src/ingest';
 import type { StackTrace, EIP1193Provider, TransactionRequest, MiradorPlugin, Web3Methods } from '../src/ingest';
 import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { FlushTraceRequest, Chain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { FlushTraceRequest, Chain as ProtoChain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 
 // Mock the gRPC-Web client
@@ -233,9 +233,9 @@ describe('Trace', () => {
       const hints = data!.getTxHashHintsList();
       expect(hints.length).toBe(2);
       expect(hints[0].getTxHash()).toBe('0xabc123');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[1].getTxHash()).toBe('0xdef456');
-      expect(hints[1].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[1].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
     });
 
     it('should have traceId set immediately (auto-generated)', () => {
@@ -558,7 +558,7 @@ describe('Trace', () => {
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints).toHaveLength(1);
       expect(hints[0].getMessageHash()).toBe('0xmsgHash123');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
     });
 
     it('should add a safe message hint with details', async () => {
@@ -571,7 +571,7 @@ describe('Trace', () => {
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints[0].getMessageHash()).toBe('0xmsgHash456');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
       expect(hints[0].getDetails()).toBe('multisig approval');
     });
 
@@ -587,20 +587,20 @@ describe('Trace', () => {
       const hints = request.getData()!.getSafeMsgHintsList();
       expect(hints).toHaveLength(2);
       expect(hints[0].getMessageHash()).toBe('0xmsg1');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[1].getMessageHash()).toBe('0xmsg2');
-      expect(hints[1].getChain()).toBe(Chain.CHAIN_BASE);
+      expect(hints[1].getChain()).toBe(ProtoChain.CHAIN_BASE);
       expect(hints[1].getDetails()).toBe('second hint');
     });
 
     it('should handle different chain names', async () => {
-      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: Chain }> = [
-        { chain: 'ethereum', expected: Chain.CHAIN_ETHEREUM },
-        { chain: 'polygon', expected: Chain.CHAIN_POLYGON },
-        { chain: 'arbitrum', expected: Chain.CHAIN_ARBITRUM },
-        { chain: 'base', expected: Chain.CHAIN_BASE },
-        { chain: 'optimism', expected: Chain.CHAIN_OPTIMISM },
-        { chain: 'bsc', expected: Chain.CHAIN_BSC },
+      const chainTests: Array<{ chain: 'ethereum' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc'; expected: ProtoChain }> = [
+        { chain: 'ethereum', expected: ProtoChain.CHAIN_ETHEREUM },
+        { chain: 'polygon', expected: ProtoChain.CHAIN_POLYGON },
+        { chain: 'arbitrum', expected: ProtoChain.CHAIN_ARBITRUM },
+        { chain: 'base', expected: ProtoChain.CHAIN_BASE },
+        { chain: 'optimism', expected: ProtoChain.CHAIN_OPTIMISM },
+        { chain: 'bsc', expected: ProtoChain.CHAIN_BSC },
       ];
 
       for (const { chain, expected } of chainTests) {
@@ -659,7 +659,7 @@ describe('Trace', () => {
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getTxHash()).toBe('0xabc');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
     });
 
     it('should extract input data from tx.data (ethers v5 style)', async () => {
@@ -685,7 +685,7 @@ describe('Trace', () => {
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
@@ -701,7 +701,7 @@ describe('Trace', () => {
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_POLYGON);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
     });
 
     it('should return this for chaining', () => {
@@ -732,7 +732,7 @@ describe('Trace', () => {
       const trace = client.trace({ name: 'TestTrace' });
       trace.web3.evm.setProvider(mockProvider);
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('sendTransaction should send tx and capture events', async () => {
@@ -795,12 +795,12 @@ describe('Trace', () => {
   describe('resolveChain', () => {
     it('should prefer explicit chain parameter', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.web3.evm.resolveChain('polygon', 1)).toBe('polygon');
+      expect(trace.web3.evm.resolveChain('polygon', 1)).toBe(Chain.Polygon);
     });
 
     it('should fall back to chainId', () => {
       const trace = client.trace({ name: 'TestTrace' });
-      expect(trace.web3.evm.resolveChain(undefined, 137)).toBe('polygon');
+      expect(trace.web3.evm.resolveChain(undefined, 137)).toBe(Chain.Polygon);
     });
 
     it('should fall back to provider chain', async () => {
@@ -810,7 +810,7 @@ describe('Trace', () => {
       const trace = client.trace({ name: 'TestTrace' });
       trace.web3.evm.setProvider(mockProvider);
       await flushPromises();
-      expect(trace.web3.evm.resolveChain()).toBe('ethereum');
+      expect(trace.web3.evm.resolveChain()).toBe(Chain.Ethereum);
     });
 
     it('should throw if chain cannot be determined', () => {
@@ -859,7 +859,7 @@ describe('Trace', () => {
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[0].getDetails()).toBeFalsy();
     });
 
@@ -885,7 +885,7 @@ describe('Trace', () => {
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const hints = request.getData()!.getTxHashHintsList();
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_BASE);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_BASE);
       expect(hints[0].getDetails()).toBeFalsy();
     });
 
@@ -941,7 +941,7 @@ describe('Trace', () => {
       const hints = data.getTxHashHintsList();
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
-      expect(hints[0].getChain()).toBe(Chain.CHAIN_ETHEREUM);
+      expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
       expect(hints[0].getDetails()).toBe('swap tx');
     });
 
@@ -1292,29 +1292,29 @@ describe('Trace', () => {
       const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
       const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('setProvider overrides plugin provider', async () => {
       const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
       const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
 
       trace.web3.evm.setProvider(polygonProvider);
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('polygon');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Polygon);
     });
 
     it('setProvider overrides initial plugin provider', async () => {
       const clientWithPoly = new Client('test-key', { plugins: [Web3Plugin({ provider: polygonProvider })] });
       const trace = clientWithPoly.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('polygon');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Polygon);
 
       trace.web3.evm.setProvider(ethProvider);
       await flushPromises();
-      expect(trace.web3.evm.getProviderChain()).toBe('ethereum');
+      expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('setProvider with failing eth_chainId leaves providerChain null', async () => {
@@ -1567,30 +1567,30 @@ describe('Trace', () => {
   });
 });
 
-describe('chainIdToName', () => {
+describe('toChain', () => {
   it('should map known chain IDs', () => {
-    expect(chainIdToName(1)).toBe('ethereum');
-    expect(chainIdToName(137)).toBe('polygon');
-    expect(chainIdToName(42161)).toBe('arbitrum');
-    expect(chainIdToName(8453)).toBe('base');
-    expect(chainIdToName(10)).toBe('optimism');
-    expect(chainIdToName(56)).toBe('bsc');
+    expect(toChain(1)).toBe(Chain.Ethereum);
+    expect(toChain(137)).toBe(Chain.Polygon);
+    expect(toChain(42161)).toBe(Chain.Arbitrum);
+    expect(toChain(8453)).toBe(Chain.Base);
+    expect(toChain(10)).toBe(Chain.Optimism);
+    expect(toChain(56)).toBe(Chain.BSC);
   });
 
   it('should return undefined for unknown chain IDs', () => {
-    expect(chainIdToName(999999)).toBeUndefined();
+    expect(toChain(999999)).toBeUndefined();
   });
 
   it('should handle bigint input', () => {
-    expect(chainIdToName(BigInt(1))).toBe('ethereum');
+    expect(toChain(BigInt(1))).toBe(Chain.Ethereum);
   });
 
   it('should handle string input', () => {
-    expect(chainIdToName('137')).toBe('polygon');
+    expect(toChain('137')).toBe(Chain.Polygon);
   });
 
   it('should handle hex string input', () => {
-    expect(chainIdToName('0x1')).toBe('ethereum');
+    expect(toChain('0x1')).toBe(Chain.Ethereum);
   });
 });
 

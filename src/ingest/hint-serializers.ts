@@ -10,7 +10,7 @@ import {
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { HintType } from '@miradorlabs/plugins';
-import type { HintDataMap, ChainName } from '@miradorlabs/plugins';
+import type { HintDataMap } from '@miradorlabs/plugins';
 import { CHAIN_MAP } from './chains';
 
 /** A function that serializes hint data into a TraceData proto message */
@@ -22,7 +22,7 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hint = data as unknown as HintDataMap[typeof HintType.TX_HASH];
     const hintMsg = new TxHashHintProto();
     hintMsg.setTxHash(hint.txHash);
-    hintMsg.setChain(CHAIN_MAP[hint.chain as ChainName]);
+    hintMsg.setChain(CHAIN_MAP[hint.chain]);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);
@@ -34,7 +34,7 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hint = data as unknown as HintDataMap[typeof HintType.SAFE_MSG];
     const hintMsg = new SafeMsgHintProto();
     hintMsg.setMessageHash(hint.messageHash);
-    hintMsg.setChain(CHAIN_MAP[hint.chain as ChainName]);
+    hintMsg.setChain(CHAIN_MAP[hint.chain]);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);
@@ -46,7 +46,7 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     const hint = data as unknown as HintDataMap[typeof HintType.SAFE_TX];
     const hintMsg = new SafeTxHintProto();
     hintMsg.setSafeTxHash(hint.safeTxHash);
-    hintMsg.setChain(CHAIN_MAP[hint.chain as ChainName]);
+    hintMsg.setChain(CHAIN_MAP[hint.chain]);
     if (hint.details) hintMsg.setDetails(hint.details);
     const ts = new Timestamp();
     ts.fromDate(hint.timestamp);

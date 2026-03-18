@@ -109,7 +109,7 @@ describe('NoopTrace', () => {
     expect(trace).toBeInstanceOf(NoopTrace);
     expect(trace.web3.evm.addTxHint('0x', 'ethereum')).toBe(trace);
     expect(trace.web3.safe.addMsgHint('0x', 'ethereum')).toBe(trace);
-    expect(trace.web3.safe.addSafeTxHint('0x', 'ethereum')).toBe(trace);
+    expect(trace.web3.safe.addTxHint('0x', 'ethereum')).toBe(trace);
     expect(trace.web3.evm.addInputData('0x')).toBe(trace);
     expect(trace.web3.evm.addTx({ hash: '0x', chainId: 1 })).toBe(trace);
     expect(trace.web3.evm.setProvider({ request: async () => null })).toBe(trace);
