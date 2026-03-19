@@ -440,7 +440,7 @@ export class Trace {
    * @param options Optional settings including captureStackTrace, or a Date for backward compatibility
    * @returns This trace builder for chaining
    */
-  addEvent(eventName: string, details?: string | object, options?: AddEventOptions | Date): this {
+  addEvent(eventName: string, details?: string | object, options?: AddEventOptions): this {
     if (this.closed) {
       this.client.logger.warn('[MiradorTrace] Trace is closed, ignoring addEvent');
       return this;
@@ -451,8 +451,8 @@ export class Trace {
     let timestamp: Date | undefined;
     let eventOptions: AddEventOptions | undefined;
 
-    if (options instanceof Date) {
-      timestamp = options;
+    if (options?.timestamp) {
+      timestamp = options.timestamp;
     } else {
       eventOptions = options;
     }
