@@ -1112,6 +1112,56 @@ describe('Trace', () => {
 
       warnSpy.mockRestore();
     });
+
+    it('close() flushes pending data before closing', async () => {
+      // Re-create mock with closeTrace support
+      const mockCloseTrace = jest.fn().mockResolvedValue({ getAccepted: () => true });
+      (IngestGatewayServiceClient as jest.Mock).mockImplementation(() => ({
+        createTrace: mockCreateTrace,
+        updateTrace: mockUpdateTrace,
+        closeTrace: mockCloseTrace,
+      }));
+      const closeClient = new Client('test-api-key');
+
+      const trace = closeClient.trace({ name: 'TestTrace', includeUserMeta: false });
+
+      // First flush to establish the trace
+      trace.addAttribute('initial', 'value');
+      trace.flush();
+      await flushPromises();
+
+      expect(mockCreateTrace).toHaveBeenCalledTimes(1);
+
+      // Add more data WITHOUT flushing, then close
+      trace.addAttribute('pending', 'data');
+      trace.addEvent('pending-event');
+
+      await trace.close('done');
+
+      // The pending data should have been flushed via updateTrace before close
+      expect(mockUpdateTrace).toHaveBeenCalledTimes(1);
+      const updateRequest = mockUpdateTrace.mock.calls[0][0] as {
+        getData: () => {
+          getAttributesList: () => Array<{ getAttributesMap: () => Map<string, string> }>;
+          getEventsList: () => Array<{ getName: () => string }>;
+        } | null;
+      };
+      const updateData = updateRequest.getData()!;
+      const updateAttrs = updateData.getAttributesList();
+      const hasAttr = updateAttrs.some(
+        (a) => a.getAttributesMap().get('pending') === 'data'
+      );
+      expect(hasAttr).toBe(true);
+
+      const updateEvents = updateData.getEventsList();
+      const hasEvent = updateEvents.some(
+        (e) => e.getName() === 'pending-event'
+      );
+      expect(hasEvent).toBe(true);
+
+      // CloseTrace should have been sent after the flush
+      expect(mockCloseTrace).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('cross-SDK trace ID sharing', () => {
