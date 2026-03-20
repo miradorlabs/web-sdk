@@ -873,9 +873,12 @@ export class Trace {
       return;
     }
 
+    // Flush any pending data before marking closed
+    this.flush();
+
     this.closed = true;
 
-    // Clear pending microtask and stop keep-alive
+    // Stop keep-alive and clear microtask flag
     this.microtaskScheduled = false;
     this.stopKeepAlive();
 
@@ -883,6 +886,16 @@ export class Trace {
     if (this.unloadHandler && typeof window !== 'undefined') {
       window.removeEventListener('beforeunload', this.unloadHandler);
       this.unloadHandler = null;
+    }
+
+    // Wait for flush queue to drain with timeout
+    let drainTimedOut = false;
+    await Promise.race([
+      this.flushQueue,
+      this.sleep(5000).then(() => { drainTimedOut = true; }),
+    ]);
+    if (drainTimedOut) {
+      console.warn('[MiradorTrace] Flush queue drain timed out after 5s, some data may not have been sent');
     }
 
     // Send close request if we have a trace ID
