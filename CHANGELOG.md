@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.0.0](https://github.com/miradorlabs/web-sdk/compare/v1.6.0...v2.0.0) (2026-03-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* removes setTraceId() method
+* trace id generation at creation, setTraceId no longer guards against overwriting
+
+### Features
+
+* add plugin system to web sdk ([d438a63](https://github.com/miradorlabs/web-sdk/commit/d438a63144bcad5a3518686fb99a058e152aced5))
+* add plugin system to web sdk ([877f411](https://github.com/miradorlabs/web-sdk/commit/877f41155803f65e54aa4262250d9aece53b11bc))
+* add resilience to web-sdk ([379a4fa](https://github.com/miradorlabs/web-sdk/commit/379a4fa3df62b2160de6ee70ad612bcee69fc660))
+* add resilience to web-sdk ([9ae03fb](https://github.com/miradorlabs/web-sdk/commit/9ae03fb259ddbb701d5f8bd44e4f50e49345f4f5))
+* addresses breaking changes ([f7ab736](https://github.com/miradorlabs/web-sdk/commit/f7ab73689eeae8227ad2c73ef1a9b9e6c40aa56a))
+* replace CreateTrace/UpdateTrace with idempotent FlushTrace RPC ([2decc38](https://github.com/miradorlabs/web-sdk/commit/2decc38d3b99188d5bb69eabed676acef7073e20))
+* replace CreateTrace/UpdateTrace with idempotent FlushTrace RPC ([6bde39d](https://github.com/miradorlabs/web-sdk/commit/6bde39d06a0aa8f04a76ea256dd5457744b05c0d))
+* update naming convention ([4de65f7](https://github.com/miradorlabs/web-sdk/commit/4de65f70928592ec05c19afee754c897126500e2))
+* update use case for plugin functionality, and update tests ([235bc05](https://github.com/miradorlabs/web-sdk/commit/235bc05c18acbf41c65bca9dd051f1312839aa4d))
+
+
+### Bug Fixes
+
+* add onCreated test and fix keepAlive retry rejection asymmetry ([5cd1c30](https://github.com/miradorlabs/web-sdk/commit/5cd1c30038d94999c2f3cfbc07fc2cfdf9078936))
+* correct onFlushed item count and decouple lifetime timer from keepAlive ([f29055d](https://github.com/miradorlabs/web-sdk/commit/f29055df0467d25606dad4109d4a911daae8a785))
+* remove date option from addEvent options ([0efaf00](https://github.com/miradorlabs/web-sdk/commit/0efaf00d56cd1e5c764c2e0f365456af5d946993))
+* remove date option from addEvent options ([dea2258](https://github.com/miradorlabs/web-sdk/commit/dea2258b8a3c72a7db62f88b76ae6b4464437b64))
+
 ## [1.6.0](https://github.com/miradorlabs/web-sdk/compare/v1.5.0...v1.6.0) (2026-03-10)
 
 
