@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.1](https://github.com/miradorlabs/web-sdk/compare/v1.6.0...v1.6.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* flush pending data before closing trace ([09695b7](https://github.com/miradorlabs/web-sdk/commit/09695b799c579fd38ce8acdb6f8ae5d8776daf89))
+* flush pending data before closing trace ([a4dd4a0](https://github.com/miradorlabs/web-sdk/commit/a4dd4a0a6006a13b830f6cda310c4ccf6552294c))
+* set release-please target-branch to triggered branch ([a4ca06c](https://github.com/miradorlabs/web-sdk/commit/a4ca06c4769d979ec3d17a001586605c2ad952e6))
+
 ## [1.6.0](https://github.com/miradorlabs/web-sdk/compare/v1.5.0...v1.6.0) (2026-03-10)
 
 
