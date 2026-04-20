@@ -53,7 +53,7 @@ const PROTECTED_KEYS = new Set([
   'maxRetries', 'retryBackoff', 'callTimeoutMs', 'keepAliveInFlight',
   'keepAliveConsecutiveFailures', 'maxTraceLifetimeMs', 'lifetimeTimer',
   'maxQueueSize', 'callbacks', 'pluginOnFlush', 'pluginOnClose', 'pluginHasPending',
-  'creationStackTrace', 'creationTimestamp', 'includeUserMeta', 'visibilityHandler',
+  'creationStackTrace', 'creationTimestamp', 'includeUserMeta', 'unloadHandler',
   // Public methods
   'addAttribute', 'addAttributes', 'addTag', 'addTags', 'addEvent',
   'info', 'warn', 'error', 'addStackTrace', 'addExistingStackTrace',
@@ -161,7 +161,7 @@ export class Trace {
 
   // Auto-close configuration
   private autoClose: boolean;
-  private visibilityHandler: (() => void) | null = null;
+  private unloadHandler: (() => void) | null = null;
 
   // Retry configuration
   private maxRetries: number;
@@ -246,14 +246,12 @@ export class Trace {
       });
     }
 
-    // Set up auto-close on page visibility change if enabled
-    if (this.autoClose && typeof document !== 'undefined') {
-      this.visibilityHandler = () => {
-        if (document.visibilityState === 'hidden') {
-          this.close('Page hidden');
-        }
+    // Set up auto-close on page unload if enabled
+    if (this.autoClose && typeof window !== 'undefined') {
+      this.unloadHandler = () => {
+        this.close('Page unload');
       };
-      document.addEventListener('visibilitychange', this.visibilityHandler);
+      window.addEventListener('beforeunload', this.unloadHandler);
     }
 
     // Dedicated lifetime timer — fires even when autoKeepAlive is false
@@ -1031,10 +1029,10 @@ export class Trace {
     this.stopKeepAlive();
     this.stopLifetimeTimer();
 
-    // Remove visibility handler if it was registered
-    if (this.visibilityHandler && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.visibilityHandler);
-      this.visibilityHandler = null;
+    // Remove unload handler if it was registered
+    if (this.unloadHandler && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.unloadHandler);
+      this.unloadHandler = null;
     }
 
     // Call plugin onClose hooks
