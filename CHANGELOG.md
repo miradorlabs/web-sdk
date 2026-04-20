@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/miradorlabs/web-sdk/compare/v2.0.0...v2.0.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* use beforeunload instead of visibilitychange event listener ([16b1dd4](https://github.com/miradorlabs/web-sdk/commit/16b1dd403b42848e6307f8784996ba19a5d3130a))
+* use beforeunload instead of visibilitychange event listener ([45f2896](https://github.com/miradorlabs/web-sdk/commit/45f2896d6a7df220ff3d94d718dc5297f358b8ce))
+
 ## [2.0.0](https://github.com/miradorlabs/web-sdk/compare/v1.6.0...v2.0.0) (2026-03-20)
 
 
