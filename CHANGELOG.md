@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/miradorlabs/web-sdk/compare/v2.0.1...v2.0.2) (2026-04-29)
+
+
+### Bug Fixes
+
+* adds release ([f130ff0](https://github.com/miradorlabs/web-sdk/commit/f130ff0f9b4d3be07dcf291284860ba6967e05b4))
+* adds release ([6e72fe1](https://github.com/miradorlabs/web-sdk/commit/6e72fe1b2a138c22e153ce734f1d622e604365a0))
+
 ## [2.0.1](https://github.com/miradorlabs/web-sdk/compare/v2.0.0...v2.0.1) (2026-04-20)
 
 
