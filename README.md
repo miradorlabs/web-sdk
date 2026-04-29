@@ -1,6 +1,11 @@
-# Mirador Web Client SDK
+# Mirador Web SDK
 
-Web browser SDK for the Mirador tracing platform. This package provides a browser-compatible client using gRPC-Web to interact with the Mirador Ingest Gateway API.
+[![npm](https://img.shields.io/npm/v/@miradorlabs/web-sdk)](https://www.npmjs.com/package/@miradorlabs/web-sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+Browser SDK for [Mirador](https://mirador.org) — cross-chain observability for blockchain applications. Capture transactions, correlate bridge flows, and trace user actions across EVM and Solana chains from your frontend.
+
+> Looking for the server-side SDK? See [`@miradorlabs/nodejs-sdk`](https://github.com/miradorlabs/nodejs-sdk).
 
 ## Installation
 
@@ -912,10 +917,13 @@ npm start
 
 Then open <http://localhost:8000> in your browser.
 
+## Links
+
+- [Mirador Website](https://mirador.org)
+- [Documentation](https://docs.mirador.org)
+- [Node.js SDK](https://github.com/miradorlabs/nodejs-sdk) — server-side companion
+- [CLI](https://github.com/miradorlabs/mirador-cli) — query traces from the terminal
+
 ## License
 
 MIT
-
-## Author
-
-@miradorlabs
