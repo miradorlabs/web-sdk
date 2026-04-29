@@ -2,7 +2,12 @@
   "name": "@miradorlabs/web-sdk",
   "version": "2.0.1",
   "type": "module",
-  "description": "Mirador Client Side Web SDK ",
+  "description": "Browser SDK for Mirador — cross-chain observability for blockchain applications.",
+  "homepage": "https://mirador.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/miradorlabs/web-sdk"
+  },
   "main": "dist/index.umd.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
