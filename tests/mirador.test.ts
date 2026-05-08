@@ -1844,4 +1844,127 @@ describe('MiradorProvider', () => {
     // Verify args were not mutated
     expect(args).toEqual(argsCopy);
   });
+
+  describe('wallet capture', () => {
+    afterEach(() => {
+      delete (window as unknown as { ethereum?: unknown }).ethereum;
+    });
+
+    const mergedAttrs = (): Map<string, string> => {
+      const merged = new Map<string, string>();
+      for (const call of mockFlushTrace.mock.calls) {
+        const req = call[0] as FlushTraceRequest;
+        for (const attrs of req.getData()?.getAttributesList() ?? []) {
+          attrs.getAttributesMap().forEach((v: string, k: string) => merged.set(k, v));
+        }
+      }
+      return merged;
+    };
+
+    it('captures legacy MetaMask wallet attributes on intercepted tx', async () => {
+      const mmProvider: EIP1193Provider & { isMetaMask?: boolean } = {
+        isMetaMask: true,
+        request: jest.fn().mockImplementation(async (args) => {
+          if (args.method === 'eth_chainId') return '0x1';
+          if (args.method === 'web3_clientVersion') return 'MetaMask/v12.0.4/Mobile';
+          if (args.method === 'eth_sendTransaction') return '0xtxhash456';
+          return null;
+        }),
+      };
+      (window as unknown as { ethereum: EIP1193Provider }).ethereum = mmProvider;
+
+      const boundTrace = mockClient.trace({ name: 'WalletTrace', includeUserMeta: false });
+      const provider = new MiradorProvider(mmProvider, mockClient, {
+        trace: boundTrace,
+        walletDiscoveryTimeoutMs: 50,
+      });
+      await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: '0xsender', to: '0xreceiver', chainId: '0x1' }],
+      });
+      boundTrace.flush();
+      await flushPromises();
+
+      const attrs = mergedAttrs();
+      expect(attrs.get('wallet.active.name')).toBe('MetaMask');
+      expect(attrs.get('wallet.active.rdns')).toBe('io.metamask');
+      expect(attrs.get('wallet.active.version')).toBe('MetaMask/v12.0.4/Mobile');
+      expect(attrs.get('wallet.active.source')).toBe('legacy');
+      const installed = JSON.parse(attrs.get('wallet.installed') as string);
+      expect(installed).toEqual([
+        { name: 'MetaMask', rdns: 'io.metamask', version: 'MetaMask/v12.0.4/Mobile', source: 'legacy' },
+      ]);
+    });
+
+    it('captures EIP-6963 announced wallet on intercepted tx', async () => {
+      const rabbyProvider: EIP1193Provider = {
+        request: jest.fn().mockImplementation(async (args) => {
+          if (args.method === 'eth_chainId') return '0x1';
+          if (args.method === 'web3_clientVersion') return 'Rabby/0.92.88';
+          if (args.method === 'eth_sendTransaction') return '0xtxhash456';
+          return null;
+        }),
+      };
+      const announcement = {
+        info: { uuid: 'abc-123', name: 'Rabby', icon: 'data:image/svg+xml;base64,', rdns: 'io.rabby' },
+        provider: rabbyProvider,
+      };
+      const onRequest = () => {
+        window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: announcement }));
+      };
+      window.addEventListener('eip6963:requestProvider', onRequest);
+
+      try {
+        const boundTrace = mockClient.trace({ name: 'WalletTrace', includeUserMeta: false });
+        const provider = new MiradorProvider(rabbyProvider, mockClient, {
+          trace: boundTrace,
+          walletDiscoveryTimeoutMs: 50,
+        });
+        await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{ from: '0xsender', chainId: '0x1' }],
+        });
+        boundTrace.flush();
+        await flushPromises();
+
+        const attrs = mergedAttrs();
+        expect(attrs.get('wallet.active.name')).toBe('Rabby');
+        expect(attrs.get('wallet.active.rdns')).toBe('io.rabby');
+        expect(attrs.get('wallet.active.uuid')).toBe('abc-123');
+        expect(attrs.get('wallet.active.version')).toBe('Rabby/0.92.88');
+        expect(attrs.get('wallet.active.source')).toBe('eip6963');
+      } finally {
+        window.removeEventListener('eip6963:requestProvider', onRequest);
+      }
+    });
+
+    it('captureWallets: false skips wallet capture entirely', async () => {
+      const mmProvider: EIP1193Provider & { isMetaMask?: boolean } = {
+        isMetaMask: true,
+        request: jest.fn().mockImplementation(async (args) => {
+          if (args.method === 'eth_chainId') return '0x1';
+          if (args.method === 'eth_sendTransaction') return '0xtxhash456';
+          return null;
+        }),
+      };
+      (window as unknown as { ethereum: EIP1193Provider }).ethereum = mmProvider;
+
+      const boundTrace = mockClient.trace({ name: 'WalletTrace', includeUserMeta: false });
+      const provider = new MiradorProvider(mmProvider, mockClient, {
+        trace: boundTrace,
+        captureWallets: false,
+      });
+      await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ from: '0xsender', chainId: '0x1' }],
+      });
+      boundTrace.flush();
+      await flushPromises();
+
+      const attrs = mergedAttrs();
+      expect(attrs.get('wallet.active.name')).toBeUndefined();
+      expect(attrs.get('wallet.installed')).toBeUndefined();
+      expect(mmProvider.request).not.toHaveBeenCalledWith({ method: 'web3_clientVersion' });
+    });
+  });
 });

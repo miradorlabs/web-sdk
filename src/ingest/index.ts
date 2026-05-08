@@ -57,3 +57,7 @@ export {
   detectOS,
   detectDeviceType,
 } from './metadata';
+
+// Wallet discovery (for advanced usage outside MiradorProvider)
+export { discoverInstalledWallets, identifyProvider } from './wallets';
+export type { WalletInfo, WalletDiscovery, EIP6963Announcement } from './wallets';

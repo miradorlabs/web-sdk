@@ -28,6 +28,14 @@ export interface MiradorProviderOptions {
   trace?: import('./trace').Trace;
   /** Trace options for auto-created traces (ignored if trace is provided) */
   traceOptions?: TraceOptions;
+  /**
+   * Capture installed/active wallet metadata (name, rdns, uuid, version) on
+   * intercepted transactions. Uses EIP-6963 + legacy `window.ethereum` flag
+   * detection. No prompts are shown. Default: true.
+   */
+  captureWallets?: boolean;
+  /** How long to wait for EIP-6963 announcements during discovery (default: 500ms) */
+  walletDiscoveryTimeoutMs?: number;
 }
 
 /**
