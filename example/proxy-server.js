@@ -3,6 +3,14 @@
  * Proxies gRPC-Web requests to the Mirador Gateway
  */
 
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+import dotenv from 'dotenv';
+
+// Load .env from this script's directory (works regardless of cwd)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(__dirname, '.env') });
+
 import express from 'express';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
@@ -12,7 +20,7 @@ const PORT = 3002;
 
 // Target Mirador Gateway
 // const GATEWAY_URL_STAGING = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
-const GATEWAY_URL_PROD = 'https://ingest.mirador.org:443';
+const GATEWAY_URL_PROD = process.env.GATEWAY_URL ||'https://ingest.mirador.org:443';
 // const GATEWAY_URL_PROD = 'http://localhost:8080'; // gRPC-Web port (local, no SSL)
 const GATEWAY_URL = GATEWAY_URL_PROD;
 // Enable CORS for all origins (development only)
