@@ -12,12 +12,26 @@
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
   "browser": "dist/index.umd.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.umd.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "prepare": "husky || true",
+    "prepublishOnly": "npm run build",
     "build": "rm -rf dist/ && rollup -c",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
