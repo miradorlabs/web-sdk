@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0](https://github.com/miradorlabs/web-sdk/compare/v2.0.2...v2.1.0) (2026-05-11)
+
+
+### Features
+
+* add functionality to capture wallet information ([9ab4b22](https://github.com/miradorlabs/web-sdk/commit/9ab4b220c886df13cbf55a4a18050c8f07924562))
+* add functionality to capture wallet information ([7e41ccc](https://github.com/miradorlabs/web-sdk/commit/7e41cccc1f8311d2b40684e2287c5109b8895646))
+
 ## [2.0.2](https://github.com/miradorlabs/web-sdk/compare/v2.0.1...v2.0.2) (2026-04-29)
 
 
