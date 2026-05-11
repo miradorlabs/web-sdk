@@ -26,6 +26,7 @@ npm install @miradorlabs/web-sdk
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
 - **Safe Multisig Tracking** - Track Safe message and transaction confirmations via `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
 - **EIP-1193 Provider Integration** - Send transactions directly through traces with `sendTransaction()`
+- **Wallet Discovery** - `MiradorProvider` auto-detects installed wallets via EIP-6963 (with legacy `window.ethereum` fallback) and tags each trace with the wallet that signed (name, rdns, version)
 - **Configurable Logger** - Pluggable `Logger` interface (defaults to no-op; enable with `debug: true` or provide custom logger)
 - **Lifecycle Callbacks** - `TraceCallbacks` for observing flush success/failure, close, and dropped items
 - **Sampling** - `sampleRate` (0–1) or custom `sampler` function; sampled-out traces return `NoopTrace`
@@ -661,7 +662,7 @@ const trace = client.trace({ name: 'Dashboard', traceId });
 
 ## MiradorProvider
 
-`MiradorProvider` is an EIP-1193 provider wrapper that automatically captures transaction data for Mirador traces. Wrap any existing provider to get automatic tracing for `eth_sendTransaction` and `eth_sendRawTransaction` calls.
+`MiradorProvider` is an EIP-1193 provider wrapper that automatically captures transaction data and wallet metadata for Mirador traces. Wrap any existing provider to get automatic tracing for `eth_sendTransaction` and `eth_sendRawTransaction` calls.
 
 ```typescript
 import { Client, MiradorProvider } from '@miradorlabs/web-sdk';
@@ -692,6 +693,74 @@ For each intercepted transaction, `MiradorProvider`:
 - Captures `tx:sent` event with transaction hash on success
 - Captures `tx:error` event with error details on failure
 - Adds transaction hash hint and input data automatically
+- Attaches wallet metadata (see [Wallet Capture](#wallet-capture) below)
+
+### Using with ethers.js
+
+`MiradorProvider` is itself an EIP-1193 provider, so you can wrap a wallet provider before handing it to ethers' `BrowserProvider`. ethers will route every `eth_sendTransaction` call through the wrapper:
+
+```typescript
+import { Client, MiradorProvider } from '@miradorlabs/web-sdk';
+import { BrowserProvider, parseEther } from 'ethers';
+
+const client = new Client('your-api-key');
+const trace = client.trace({ name: 'TokenTransfer' });
+
+const wrapped = new MiradorProvider(window.ethereum, client, { trace });
+const ethersProvider = new BrowserProvider(wrapped);
+const signer = await ethersProvider.getSigner();
+
+// tx hint, input data, and wallet metadata are auto-attached to `trace`
+const tx = await signer.sendTransaction({
+  to: '0xRecipient...',
+  value: parseEther('0.1'),
+});
+
+trace.info('transaction_sent', { txHash: tx.hash });
+```
+
+### Wallet Capture
+
+When `captureWallets` is enabled (default), `MiradorProvider` enumerates installed wallets via [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) (Multi Injected Provider Discovery), with a legacy `window.ethereum` fallback for wallets that haven't migrated. Each wallet is also queried for its client version via the `web3_clientVersion` JSON-RPC method. No wallet prompts are shown — discovery is fully passive.
+
+On every intercepted transaction, the following attributes are attached to the trace:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `wallet.installed` | JSON array | Every detected wallet: `[{ name, rdns, version?, source }, ...]` |
+| `wallet.active.name` | string | Name of the wallet that signed (e.g. `"MetaMask"`) |
+| `wallet.active.rdns` | string | Reverse-DNS identifier (e.g. `"io.metamask"`) |
+| `wallet.active.uuid` | string | Stable per-install UUID (EIP-6963 only) |
+| `wallet.active.version` | string | Client version (e.g. `"MetaMask/v12.0.4/Mobile"`) — omitted if the wallet doesn't support `web3_clientVersion` |
+| `wallet.active.source` | `'eip6963'` \| `'legacy'` | How the active wallet was identified |
+
+Disable or tune via options:
+
+```typescript
+new MiradorProvider(window.ethereum, client, {
+  captureWallets: false,             // disable entirely
+  walletDiscoveryTimeoutMs: 1000,    // wait longer for slow EIP-6963 announcements (default: 500ms)
+});
+```
+
+Discovery runs in the background at construction time, so it's typically settled long before the user finishes interacting with the wallet popup. If a tx fires before discovery completes, the SDK waits up to `walletDiscoveryTimeoutMs` before attaching attributes — failures during capture never block or fail the transaction.
+
+> **Privacy note:** The list of installed wallets combined with browser metadata is a fingerprinting vector. The SDK does **not** capture wallet addresses or accounts — those remain under the dApp's control. If you disclose tracking in your privacy policy, you may want to mention installed-wallet detection.
+
+#### Standalone wallet discovery
+
+For non-transaction flows (e.g. attaching wallet metadata to a trace before any tx is signed), you can call `discoverInstalledWallets()` directly:
+
+```typescript
+import { discoverInstalledWallets, identifyProvider } from '@miradorlabs/web-sdk';
+
+const discovery = await discoverInstalledWallets();
+trace.addAttribute('wallet.installed', discovery.wallets);
+
+// Later, identify which wallet a given provider corresponds to
+const active = await identifyProvider(window.ethereum, discovery);
+if (active) trace.addAttribute('wallet.active', active);
+```
 
 ## Chain Utilities
 
@@ -827,6 +896,8 @@ import {
   detectBrowser,
   detectOS,
   detectDeviceType,
+  discoverInstalledWallets,
+  identifyProvider,
 
   // Types
   ClientOptions,
@@ -846,7 +917,10 @@ import {
   TxHintOptions,            // { input?, details? }
   TransactionLike,          // { hash, data?, input?, chainId? }
   TransactionRequest,       // { from, to?, data?, value?, ... }
-  MiradorProviderOptions,   // { trace?, traceOptions? }
+  MiradorProviderOptions,   // { trace?, traceOptions?, captureWallets?, walletDiscoveryTimeoutMs? }
+  WalletInfo,               // { name, rdns, uuid?, version?, source: 'eip6963' | 'legacy' }
+  WalletDiscovery,          // { wallets: WalletInfo[], announcementsByProvider: Map<EIP1193Provider, EIP6963Announcement> }
+  EIP6963Announcement,      // { info: { uuid, name, icon, rdns }, provider: EIP1193Provider }
   Logger,                   // { debug(), warn(), error() }
   TraceCallbacks,           // { onFlushed?, onFlushError?, onClosed?, onDropped? }
 } from '@miradorlabs/web-sdk';
@@ -902,7 +976,7 @@ A complete working example is available in the [`example/`](./example/) director
 - Wallet connection using EIP-6963 (Multi Injected Provider Discovery)
 - Creating and managing traces
 - Adding attributes, tags, and events
-- Blockchain transaction correlation with `web3.evm.addTxHint()`
+- `MiradorProvider` wrapping the wallet so `eth_sendTransaction` is auto-traced (tx hint, input data, and `wallet.installed` / `wallet.active.*` capture)
 - Safe multisig tracking with `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
 - Network switching and balance display
 

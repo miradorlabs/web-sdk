@@ -33,6 +33,7 @@
     "@miradorlabs/web-sdk": "file:..",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "ethers": "^6.13.0",
     "express": "^4.22.1",
     "http-proxy-middleware": "^3.0.3"

@@ -5,6 +5,7 @@
 import type { EIP1193Provider, EvmMethods } from '@miradorlabs/plugins';
 import type { MiradorProviderOptions, TraceOptions } from './types';
 import type { Trace } from './trace';
+import { discoverInstalledWallets, identifyProvider, type WalletDiscovery } from './wallets';
 
 /** Minimal Client interface needed by MiradorProvider */
 interface TraceFactory {
@@ -18,6 +19,7 @@ export class MiradorProvider implements EIP1193Provider {
   private client: TraceFactory;
   private boundTrace: Web3Trace | null;
   private traceOptions?: TraceOptions;
+  private walletDiscovery: Promise<WalletDiscovery> | null;
 
   constructor(underlying: EIP1193Provider, client: TraceFactory, options?: MiradorProviderOptions) {
     this.underlying = underlying;
@@ -32,6 +34,15 @@ export class MiradorProvider implements EIP1193Provider {
         'new Client(key, { plugins: [Web3Plugin()] })'
       );
     }
+
+    const captureWallets = options?.captureWallets !== false;
+    const discoveryTimeoutMs = options?.walletDiscoveryTimeoutMs ?? 500;
+    this.walletDiscovery = captureWallets
+      ? discoverInstalledWallets(discoveryTimeoutMs).catch(() => ({
+          wallets: [],
+          announcementsByProvider: new Map(),
+        }))
+      : null;
   }
 
   async request(args: { method: string; params?: unknown[] }): Promise<unknown> {
@@ -73,10 +84,12 @@ export class MiradorProvider implements EIP1193Provider {
         }
       }
 
+      await this.attachWalletAttributes(trace);
       trace.info('tx:sent', { txHash, method: args.method });
       return result;
     } catch (err) {
       const error = err as Error & { code?: unknown; data?: unknown };
+      await this.attachWalletAttributes(trace);
       trace.error('tx:error', {
         message: error.message,
         code: error.code,
@@ -84,6 +97,36 @@ export class MiradorProvider implements EIP1193Provider {
         method: args.method,
       });
       throw err;
+    }
+  }
+
+  private async attachWalletAttributes(trace: Trace): Promise<void> {
+    if (!this.walletDiscovery) return;
+    try {
+      const discovery = await this.walletDiscovery;
+      const active = await identifyProvider(this.underlying, discovery);
+
+      const attrs: Record<string, string | number | boolean | object> = {};
+      if (discovery.wallets.length > 0) {
+        attrs['wallet.installed'] = discovery.wallets.map((w) => ({
+          name: w.name,
+          rdns: w.rdns,
+          version: w.version,
+          source: w.source,
+        }));
+      }
+      if (active) {
+        attrs['wallet.active.name'] = active.name;
+        attrs['wallet.active.rdns'] = active.rdns;
+        attrs['wallet.active.source'] = active.source;
+        if (active.version) attrs['wallet.active.version'] = active.version;
+        if (active.uuid) attrs['wallet.active.uuid'] = active.uuid;
+      }
+      if (Object.keys(attrs).length > 0) {
+        trace.addAttributes(attrs);
+      }
+    } catch {
+      // Best-effort — never let wallet capture break the tx flow
     }
   }
 }

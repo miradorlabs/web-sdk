@@ -1,7 +1,7 @@
 // ============================================================================
 // Transaction Functions
 // ============================================================================
-import { ChainName } from '@miradorlabs/web-sdk'
+import { MiradorProvider } from '@miradorlabs/web-sdk'
 import { BrowserProvider, Interface, parseEther, parseUnits } from 'ethers';
 import { elements, walletState, traceState, miradorClient } from './state.js';
 import { log, showStatus, formatAddress, getNetworkInfo } from './utils.js';
@@ -115,7 +115,11 @@ export async function sendTransaction(): Promise<void> {
     // Send the transaction using ethers.js
     showStatus('Please confirm the transaction in your wallet...', 'pending', 0);
 
-    const ethersProvider = new BrowserProvider(walletState.provider);
+    // Wrap the wallet provider so MiradorProvider can intercept eth_sendTransaction
+    // and auto-attach tx hints, input data, and detected wallet metadata
+    // (wallet.installed + wallet.active.*) to the bound trace.
+    const wrapped = new MiradorProvider(walletState.provider, miradorClient, { trace });
+    const ethersProvider = new BrowserProvider(wrapped);
     const signer = await ethersProvider.getSigner();
 
     let tx;
@@ -158,10 +162,7 @@ export async function sendTransaction(): Promise<void> {
       elements.traceStatus.innerHTML = '<span class="spinner"></span> Pending';
     }
 
-    // Add transaction hash hint and input data for blockchain correlation
-    const chainName: ChainName = networkInfo.chain || 'ethereum';
-    trace.web3.evm.addTxHint(txHash, chainName, isTokenTransfer ? 'ERC-20 Transfer' : 'ETH Transfer');
-    trace.web3.evm.addInputData(tx.data);
+    // tx hint, input data, and wallet metadata are auto-attached by MiradorProvider above.
 
     // Optional: Add a Safe message hint if this is a Safe multisig operation.
     // Uncomment the line below and provide the Safe message hash to track
