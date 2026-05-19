@@ -26,6 +26,13 @@ function getSafeTxHints(data: FlushTraceData) {
     .filter((h): h is NonNullable<typeof h> => h != null);
 }
 
+// Helper to extract relay hints from FlushTraceData plugins
+function getRelayHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getRelayHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
+
 // Mock the gRPC-Web client
 jest.mock('mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
 
@@ -666,6 +673,102 @@ describe('Trace', () => {
       expect(safeMsgHints).toHaveLength(1);
       expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
       expect(safeMsgHints[0].getDetails()).toBe('approval');
+    });
+  });
+
+  describe('addRelayQuoteHint', () => {
+    it('should add a relay quote hint with required fields encoded as snake_case JSON', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addRelayQuoteHint({
+          requestId: 'rly_request_123',
+          originChainId: 1,
+          destChainId: 8453,
+        });
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
+      const relayHints = getRelayHints(request.getData()!);
+      expect(relayHints).toHaveLength(1);
+      expect(relayHints[0].getRequestId()).toBe('rly_request_123');
+      expect(relayHints[0].getTimestamp()).not.toBeUndefined();
+      const details = JSON.parse(relayHints[0].getDetails());
+      expect(details.origin_chain_id).toBe(1);
+      expect(details.dest_chain_id).toBe(8453);
+    });
+
+    it('should include every optional quote field in the JSON details', async () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addRelayQuoteHint({
+          requestId: 'rly_full',
+          originChainId: 1,
+          destChainId: 137,
+          orderId: 'ord_42',
+          onChainId: '0xabcd',
+          originChainName: 'ethereum',
+          destChainName: 'polygon',
+          originCurrency: 'USDC',
+          destCurrency: 'USDC',
+          depositor: '0xdep',
+          recipient: '0xrec',
+          solverAddress: '0xsolver',
+          depositoryAddress: '0xdepo',
+          originAmount: '1000000',
+          destExpectedAmount: '999000',
+          destMinimumAmount: '980000',
+        });
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
+      const relayHints = getRelayHints(request.getData()!);
+      const details = JSON.parse(relayHints[0].getDetails());
+      expect(details).toEqual({
+        origin_chain_id: 1,
+        dest_chain_id: 137,
+        order_id: 'ord_42',
+        on_chain_id: '0xabcd',
+        origin_chain_name: 'ethereum',
+        dest_chain_name: 'polygon',
+        origin_currency: 'USDC',
+        dest_currency: 'USDC',
+        depositor: '0xdep',
+        recipient: '0xrec',
+        solver_address: '0xsolver',
+        depository_address: '0xdepo',
+        origin_amount: '1000000',
+        dest_expected_amount: '999000',
+        dest_minimum_amount: '980000',
+      });
+    });
+
+    it('should throw when requestId is missing', () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+      expect(() => trace.web3.relay.addRelayQuoteHint({
+        requestId: '',
+        originChainId: 1,
+        destChainId: 137,
+      })).toThrow(/requestId is required/);
+    });
+
+    it('should throw when originChainId is zero', () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+      expect(() => trace.web3.relay.addRelayQuoteHint({
+        requestId: 'rly_x',
+        originChainId: 0,
+        destChainId: 137,
+      })).toThrow(/originChainId/);
+    });
+
+    it('should throw when destChainId is zero', () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+      expect(() => trace.web3.relay.addRelayQuoteHint({
+        requestId: 'rly_x',
+        originChainId: 1,
+        destChainId: 0,
+      })).toThrow(/destChainId/);
     });
   });
 
