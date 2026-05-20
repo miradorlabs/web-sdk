@@ -676,10 +676,10 @@ describe('Trace', () => {
     });
   });
 
-  describe('addRelayQuoteHint', () => {
+  describe('addQuoteHint', () => {
     it('should add a relay quote hint with required fields encoded as snake_case JSON', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .web3.relay.addRelayQuoteHint({
+        .web3.relay.addQuoteHint({
           requestId: 'rly_request_123',
           originChainId: 1,
           destChainId: 8453,
@@ -700,7 +700,7 @@ describe('Trace', () => {
 
     it('should include every optional quote field in the JSON details', async () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .web3.relay.addRelayQuoteHint({
+        .web3.relay.addQuoteHint({
           requestId: 'rly_full',
           originChainId: 1,
           destChainId: 137,
@@ -746,7 +746,7 @@ describe('Trace', () => {
 
     it('should throw when requestId is missing', () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addRelayQuoteHint({
+      expect(() => trace.web3.relay.addQuoteHint({
         requestId: '',
         originChainId: 1,
         destChainId: 137,
@@ -755,7 +755,7 @@ describe('Trace', () => {
 
     it('should throw when originChainId is zero', () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addRelayQuoteHint({
+      expect(() => trace.web3.relay.addQuoteHint({
         requestId: 'rly_x',
         originChainId: 0,
         destChainId: 137,
@@ -764,7 +764,7 @@ describe('Trace', () => {
 
     it('should throw when destChainId is zero', () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addRelayQuoteHint({
+      expect(() => trace.web3.relay.addQuoteHint({
         requestId: 'rly_x',
         originChainId: 1,
         destChainId: 0,
