@@ -26,6 +26,13 @@ function getSafeTxHints(data: FlushTraceData) {
     .filter((h): h is NonNullable<typeof h> => h != null);
 }
 
+// Helper to extract relay hints from FlushTraceData plugins
+function getRelayHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getRelayHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
+
 // Mock the gRPC-Web client
 jest.mock('mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
 
@@ -666,6 +673,46 @@ describe('Trace', () => {
       expect(safeMsgHints).toHaveLength(1);
       expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
       expect(safeMsgHints[0].getDetails()).toBe('approval');
+    });
+  });
+
+  describe('addQuoteHint', () => {
+    it('should add a relay quote hint with just a requestId', async () => {
+      const trace = client
+        .trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addQuoteHint('rly_request_123');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
+      const relayHints = getRelayHints(request.getData()!);
+      expect(relayHints).toHaveLength(1);
+      expect(relayHints[0].getRequestId()).toBe('rly_request_123');
+      expect(relayHints[0].getTimestamp()).not.toBeUndefined();
+      // No message → details defaults to empty (jspb default).
+      expect(relayHints[0].getDetails()).toBe('');
+    });
+
+    it('should pass the optional message through as the proto details field', async () => {
+      const trace = client
+        .trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addQuoteHint('rly_with_note', 'queued from swap modal');
+
+      trace.flush();
+      await flushPromises();
+
+      const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
+      const relayHints = getRelayHints(request.getData()!);
+      expect(relayHints[0].getRequestId()).toBe('rly_with_note');
+      expect(relayHints[0].getDetails()).toBe('queued from swap modal');
+    });
+
+    it('should throw when requestId is missing', () => {
+      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
+      expect(() => trace.web3.relay.addQuoteHint('')).toThrow(
+        /requestId is required/,
+      );
     });
   });
 

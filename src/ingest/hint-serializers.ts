@@ -7,6 +7,7 @@ import {
   TxHashHint as TxHashHintProto,
   SafeMsgHint as SafeMsgHintProto,
   SafeTxHint as SafeTxHintProto,
+  RelayHint as RelayHintProto,
 } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { HintType } from '@miradorlabs/plugins';
@@ -66,6 +67,19 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     hintMsg.setTimestamp(ts);
     const plugin = new FlushTraceData.Plugin();
     plugin.setSafeTxHints(hintMsg);
+    traceData.addPlugins(plugin);
+  },
+
+  [HintType.RELAY_QUOTE]: (traceData, data) => {
+    const hint = data as unknown as HintDataMap[typeof HintType.RELAY_QUOTE];
+    const hintMsg = new RelayHintProto();
+    hintMsg.setRequestId(hint.requestId);
+    if (hint.message) hintMsg.setDetails(hint.message);
+    const ts = new Timestamp();
+    ts.fromDate(hint.timestamp);
+    hintMsg.setTimestamp(ts);
+    const plugin = new FlushTraceData.Plugin();
+    plugin.setRelayHints(hintMsg);
     traceData.addPlugins(plugin);
   },
 };
