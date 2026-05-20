@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.0](https://github.com/miradorlabs/web-sdk/compare/v2.1.0...v2.2.0) (2026-05-20)
+
+
+### Features
+
+* **relay:** add relay bridge plugin functionality to web-sdk ([e289207](https://github.com/miradorlabs/web-sdk/commit/e2892072a567508f9ff0f741aa9dab9688845221))
+* **relay:** add relay bridge plugin functionality to web-sdk ([8921bae](https://github.com/miradorlabs/web-sdk/commit/8921baecdfe98529be42dfabecfb572761bc2ea2))
+
 ## [2.1.0](https://github.com/miradorlabs/web-sdk/compare/v2.0.2...v2.1.0) (2026-05-11)
 
 
