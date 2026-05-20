@@ -677,13 +677,10 @@ describe('Trace', () => {
   });
 
   describe('addQuoteHint', () => {
-    it('should add a relay quote hint with required fields encoded as snake_case JSON', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .web3.relay.addQuoteHint({
-          requestId: 'rly_request_123',
-          originChainId: 1,
-          destChainId: 8453,
-        });
+    it('should add a relay quote hint with just a requestId', async () => {
+      const trace = client
+        .trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addQuoteHint('rly_request_123');
 
       trace.flush();
       await flushPromises();
@@ -693,82 +690,29 @@ describe('Trace', () => {
       expect(relayHints).toHaveLength(1);
       expect(relayHints[0].getRequestId()).toBe('rly_request_123');
       expect(relayHints[0].getTimestamp()).not.toBeUndefined();
-      const details = JSON.parse(relayHints[0].getDetails());
-      expect(details.origin_chain_id).toBe(1);
-      expect(details.dest_chain_id).toBe(8453);
+      // No message → details defaults to empty (jspb default).
+      expect(relayHints[0].getDetails()).toBe('');
     });
 
-    it('should include every optional quote field in the JSON details', async () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false })
-        .web3.relay.addQuoteHint({
-          requestId: 'rly_full',
-          originChainId: 1,
-          destChainId: 137,
-          orderId: 'ord_42',
-          onChainId: '0xabcd',
-          originChainName: 'ethereum',
-          destChainName: 'polygon',
-          originCurrency: 'USDC',
-          destCurrency: 'USDC',
-          depositor: '0xdep',
-          recipient: '0xrec',
-          solverAddress: '0xsolver',
-          depositoryAddress: '0xdepo',
-          originAmount: '1000000',
-          destExpectedAmount: '999000',
-          destMinimumAmount: '980000',
-        });
+    it('should pass the optional message through as the proto details field', async () => {
+      const trace = client
+        .trace({ name: 'TestTrace', includeUserMeta: false })
+        .web3.relay.addQuoteHint('rly_with_note', 'queued from swap modal');
 
       trace.flush();
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const relayHints = getRelayHints(request.getData()!);
-      const details = JSON.parse(relayHints[0].getDetails());
-      expect(details).toEqual({
-        origin_chain_id: 1,
-        dest_chain_id: 137,
-        order_id: 'ord_42',
-        on_chain_id: '0xabcd',
-        origin_chain_name: 'ethereum',
-        dest_chain_name: 'polygon',
-        origin_currency: 'USDC',
-        dest_currency: 'USDC',
-        depositor: '0xdep',
-        recipient: '0xrec',
-        solver_address: '0xsolver',
-        depository_address: '0xdepo',
-        origin_amount: '1000000',
-        dest_expected_amount: '999000',
-        dest_minimum_amount: '980000',
-      });
+      expect(relayHints[0].getRequestId()).toBe('rly_with_note');
+      expect(relayHints[0].getDetails()).toBe('queued from swap modal');
     });
 
     it('should throw when requestId is missing', () => {
       const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addQuoteHint({
-        requestId: '',
-        originChainId: 1,
-        destChainId: 137,
-      })).toThrow(/requestId is required/);
-    });
-
-    it('should throw when originChainId is zero', () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addQuoteHint({
-        requestId: 'rly_x',
-        originChainId: 0,
-        destChainId: 137,
-      })).toThrow(/originChainId/);
-    });
-
-    it('should throw when destChainId is zero', () => {
-      const trace = client.trace({ name: 'TestTrace', includeUserMeta: false });
-      expect(() => trace.web3.relay.addQuoteHint({
-        requestId: 'rly_x',
-        originChainId: 1,
-        destChainId: 0,
-      })).toThrow(/destChainId/);
+      expect(() => trace.web3.relay.addQuoteHint('')).toThrow(
+        /requestId is required/,
+      );
     });
   });
 
