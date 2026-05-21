@@ -12,6 +12,14 @@
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
   "browser": "dist/index.umd.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.umd.js",
+      "default": "./dist/index.esm.js"
+    }
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
