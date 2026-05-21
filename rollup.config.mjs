@@ -28,6 +28,10 @@ export default [
       // Keep these as peer dependencies - users should provide them
       'rxjs',
       /^rxjs\/.*/,
+      // Keep proto deps as external to avoid webpack transpilation issues
+      '@miradorlabs/plugins',
+      'mirador-gateway-ingest-web',
+      /^mirador-gateway-ingest-web\/.*/,
     ],
   },
   // Bundle the JavaScript/TypeScript code for UMD (browser global)
@@ -58,6 +62,10 @@ export default [
       // Keep rxjs as external - it's commonly provided
       'rxjs',
       /^rxjs\/.*/,
+      // Keep proto deps as external to avoid webpack transpilation issues
+      '@miradorlabs/plugins',
+      'mirador-gateway-ingest-web',
+      /^mirador-gateway-ingest-web\/.*/,
     ],
   },
   // Bundle the TypeScript declarations
@@ -71,6 +79,9 @@ export default [
     external: [
       'rxjs',
       /^rxjs\/.*/,
+      '@miradorlabs/plugins',
+      'mirador-gateway-ingest-web',
+      /^mirador-gateway-ingest-web\/.*/,
     ],
   },
 ];
