@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.1](https://github.com/miradorlabs/web-sdk/compare/v2.2.0...v2.2.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* restore package.json exports field for module resolution ([bb36082](https://github.com/miradorlabs/web-sdk/commit/bb360823449cde3eba308cede37fa15771bd7e4d))
+* restore package.json exports field for module resolution ([0e17bbf](https://github.com/miradorlabs/web-sdk/commit/0e17bbfde6f4689bc8b13a198791e2b49e109b1c))
+
 ## [2.2.0](https://github.com/miradorlabs/web-sdk/compare/v2.1.0...v2.2.0) (2026-05-20)
 
 
