@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.2](https://github.com/miradorlabs/web-sdk/compare/v2.2.1...v2.2.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* bundle grpc-web proto stubs into the SDK output ([f745a38](https://github.com/miradorlabs/web-sdk/commit/f745a38e943222f4dd55a2d98dcba38c5bd5c1ba))
+* bundle grpc-web proto stubs into the SDK output ([30c6709](https://github.com/miradorlabs/web-sdk/commit/30c67099babe0e1877f7c029c5fa2cd7d4f8a911))
+
 ## [2.2.1](https://github.com/miradorlabs/web-sdk/compare/v2.2.0...v2.2.1) (2026-05-21)
 
 

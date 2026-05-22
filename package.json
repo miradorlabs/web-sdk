@@ -1,6 +1,6 @@
 {
   "name": "@miradorlabs/web-sdk",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "type": "module",
   "description": "Browser SDK for Mirador — cross-chain observability for blockchain applications.",
   "homepage": "https://mirador.org",
