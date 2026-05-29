@@ -9,7 +9,14 @@ export { toChain, Chain, Severity } from './src/ingest';
 
 // Plugin system
 export { Web3Plugin } from './src/ingest';
-export type { Web3PluginOptions, Web3Methods, EvmMethods, SafeNamespaceMethods } from './src/ingest';
+export type {
+  Web3PluginOptions,
+  Web3Methods,
+  EvmMethods,
+  SafeNamespaceMethods,
+  SolanaNamespaceMethods,
+  RelayNamespaceMethods,
+} from './src/ingest';
 export { HintType } from './src/ingest';
 export type {
   MiradorPlugin,
@@ -30,9 +37,11 @@ export type {
   TraceOptions,
   ClientMetadata,
   TraceEvent,
-  TxHashHint,
+  EvmTxHint,
+  SolanaTxHint,
   SafeMsgHintData,
   SafeTxHintData,
+  RelayQuoteHintData,
   ChainName,
   ChainInput,
   AddEventOptions,
