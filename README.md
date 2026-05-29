@@ -7,6 +7,34 @@ Browser SDK for [Mirador](https://mirador.org) — cross-chain observability for
 
 > Looking for the server-side SDK? See [`@miradorlabs/nodejs-sdk`](https://github.com/miradorlabs/nodejs-sdk).
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Features](#features)
+- [Quick Start (Default)](#quick-start-default)
+- [Manual Flush Mode](#manual-flush-mode)
+- [Keep-Alive & Trace Lifecycle](#keep-alive--trace-lifecycle)
+- [API Reference](#api-reference)
+  - [Client](#client)
+  - [Trace (Builder)](#trace-builder)
+- [Logger](#logger)
+- [Lifecycle Callbacks (TraceCallbacks)](#lifecycle-callbacks-tracecallbacks)
+- [Sampling](#sampling)
+- [Complete Example: Transaction Tracking](#complete-example-transaction-tracking)
+- [Tracing Transaction Input Data with ethers.js](#tracing-transaction-input-data-with-ethersjs)
+- [Cross-SDK Trace Sharing](#cross-sdk-trace-sharing)
+- [MiradorProvider](#miradorprovider)
+- [Chain Utilities](#chain-utilities)
+- [Automatic Client Metadata Collection](#automatic-client-metadata-collection)
+- [Stack Trace Utilities](#stack-trace-utilities)
+- [TypeScript Support](#typescript-support)
+- [Browser Compatibility](#browser-compatibility)
+- [Module Formats](#module-formats)
+- [Development](#development)
+- [Example Application](#example-application)
+- [Links](#links)
+- [License](#license)
+
 ## Installation
 
 ```bash
@@ -1008,27 +1036,39 @@ npm run release:minor  # 1.x.0
 npm run release:major  # x.0.0
 ```
 
-## Example Application
+## Example Applications
 
-A complete working example is available in the [`example/`](./example/) directory. It demonstrates:
+The [`examples/`](./examples/) directory contains runnable demos, one per use case:
+
+### [`examples/default/`](./examples/default/) — EVM + multi-wallet
+
+The flagship demo. Runs on port `8000`.
 
 - Wallet connection using EIP-6963 (Multi Injected Provider Discovery)
-- Creating and managing traces
-- Adding attributes, tags, and events
+- Creating and managing traces (attributes, tags, events)
 - `MiradorProvider` wrapping the wallet so `eth_sendTransaction` is auto-traced (tx hint, input data, and `wallet.installed` / `wallet.active.*` capture)
 - Safe multisig tracking with `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
-- Network switching and balance display
-
-To run the example:
+- Network switching and balance display across Ethereum, Polygon, Arbitrum, Optimism, Base, BSC
 
 ```bash
-cd example
+cd examples/default
 npm install
-npm run build
-npm start
+npm run dev
 ```
 
-Then open <http://localhost:8000> in your browser.
+### [`examples/solana/`](./examples/solana/) — Solana tx hints
+
+Phantom + a devnet SOL transfer, traced with `web3.solana.addTxHint(signature)`. Runs on port `8001`.
+
+- Phantom wallet integration via the injected `window.solana` provider
+- `web3.solana.addTxHint(signature, details?)` — no chain argument, signature is the identifier
+- Trace open → sign + send → addTxHint → confirm → close
+
+```bash
+cd examples/solana
+npm install
+npm run dev
+```
 
 ## Links
 

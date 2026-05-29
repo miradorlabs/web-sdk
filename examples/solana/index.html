@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mirador — Solana Tracing Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #0d0d1f 0%, #14092b 50%, #1a0d3a 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #e4e4e4;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    .header { text-align: center; margin-bottom: 30px; }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header .subtitle { color: #8892b0; font-size: 14px; }
+
+    .card {
+      position: relative;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(153, 69, 255, 0.15);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card h2 .icon { font-size: 22px; }
+
+    .row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+
+    label { font-size: 12px; color: #8892b0; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    input[type="text"], input[type="number"], input[type="password"] {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #e4e4e4;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus { border-color: rgba(153, 69, 255, 0.5); }
+
+    button {
+      background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);
+      color: #0d0d1f;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, opacity 0.15s ease;
+    }
+
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e4;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .wallet-pubkey { font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; color: #14F195; }
+
+    .balance { font-size: 14px; color: #8892b0; margin-top: 4px; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge.devnet { background: rgba(20, 241, 149, 0.15); color: #14F195; }
+    .badge.connected { background: rgba(20, 241, 149, 0.15); color: #14F195; }
+    .badge.disconnected { background: rgba(255, 85, 85, 0.15); color: #ff5555; }
+
+    .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .pill {
+      background: rgba(153, 69, 255, 0.12);
+      border: 1px solid rgba(153, 69, 255, 0.3);
+      color: #c8a8ff;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .activity-log {
+      max-height: 320px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .activity-log .log-entry { padding: 2px 0; }
+    .activity-log .log-entry.info { color: #8892b0; }
+    .activity-log .log-entry.success { color: #14F195; }
+    .activity-log .log-entry.error { color: #ff5555; }
+    .activity-log .log-entry.warn { color: #ffaa00; }
+    .activity-log .ts { color: #4a5170; margin-right: 8px; }
+
+    .trace-id { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: #c8a8ff; word-break: break-all; }
+
+    .status-box {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 13px;
+    }
+
+    a { color: #c8a8ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hidden { display: none !important; }
+
+    .footer-meta { text-align: center; color: #4a5170; font-size: 11px; margin-top: 24px; }
+
+    .toggle {
+      background: none;
+      border: none;
+      color: #8892b0;
+      cursor: pointer;
+      font-size: 12px;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <h1>Mirador × Solana</h1>
+      <div class="subtitle">Phantom + devnet SOL transfer — traced with <code>web3.solana.addTxHint(signature)</code></div>
+    </div>
+
+    <!-- API KEY -->
+    <div class="card">
+      <h2><span class="icon">🔑</span> API Key</h2>
+      <div id="apiKeyForm">
+        <div class="field">
+          <label for="apiKeyInput">Mirador API Key</label>
+          <input id="apiKeyInput" type="password" placeholder="mir_xxxxx..." autocomplete="off">
+        </div>
+        <button id="saveApiKeyBtn">Save & Initialize Client</button>
+        <button class="toggle" id="toggleApiKeyBtn">Show key</button>
+      </div>
+      <div id="apiKeySaved" class="hidden">
+        <div>API key saved · <button class="toggle" id="changeApiKeyBtn">Change</button></div>
+      </div>
+    </div>
+
+    <!-- WALLET -->
+    <div class="card">
+      <h2><span class="icon">👻</span> Phantom Wallet <span class="badge devnet">Devnet</span></h2>
+      <div class="row">
+        <div>
+          <div id="walletStatus">
+            <span class="badge disconnected">Disconnected</span>
+          </div>
+          <div id="walletInfo" class="hidden" style="margin-top: 8px;">
+            <div class="wallet-pubkey" id="walletPubkey"></div>
+            <div class="balance" id="walletBalance">— SOL</div>
+          </div>
+        </div>
+        <div>
+          <button id="connectWalletBtn">Connect Phantom</button>
+          <button id="disconnectWalletBtn" class="secondary hidden">Disconnect</button>
+        </div>
+      </div>
+      <div class="status-box" style="margin-top: 14px;">
+        Need devnet SOL? <a href="https://faucet.solana.com/" target="_blank" rel="noopener">Open the Solana faucet →</a>
+      </div>
+    </div>
+
+    <!-- TRANSACTION -->
+    <div class="card">
+      <h2><span class="icon">💸</span> Send & Trace</h2>
+
+      <div class="field">
+        <label for="traceName">Trace name</label>
+        <input id="traceName" type="text" value="solana_transfer" />
+      </div>
+
+      <div class="field">
+        <label for="recipientPubkey">Recipient public key</label>
+        <input id="recipientPubkey" type="text" placeholder="A devnet pubkey (44 chars base58)" />
+      </div>
+
+      <div class="field">
+        <label for="sendAmount">Amount (SOL)</label>
+        <input id="sendAmount" type="number" step="0.0001" min="0" value="0.001" />
+      </div>
+
+      <div class="field">
+        <label>Custom attributes (added to the trace)</label>
+        <div class="row" style="gap: 8px;">
+          <input id="attrKey" type="text" placeholder="key" style="flex: 1;" />
+          <input id="attrValue" type="text" placeholder="value" style="flex: 1;" />
+          <button id="addAttributeBtn" class="secondary">Add</button>
+        </div>
+        <div id="attributesList" class="pill-row"></div>
+      </div>
+
+      <div class="field">
+        <label>Tags</label>
+        <div class="row" style="gap: 8px;">
+          <input id="tagInput" type="text" placeholder="e.g. devnet, swap" style="flex: 1;" />
+          <button id="addTagBtn" class="secondary">Add</button>
+        </div>
+        <div id="tagsList" class="pill-row"></div>
+      </div>
+
+      <button id="sendTxBtn" disabled>Send Transaction</button>
+
+      <div id="traceResult" class="status-box hidden" style="margin-top: 14px;">
+        <div><strong>Trace ID:</strong> <span id="traceIdLabel" class="trace-id"></span></div>
+        <div style="margin-top: 8px;"><strong>Signature:</strong> <span id="signatureLabel" class="trace-id"></span></div>
+        <div style="margin-top: 8px;"><strong>Status:</strong> <span id="txStatusLabel">—</span></div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY LOG -->
+    <div class="card">
+      <h2><span class="icon">📜</span> Activity Log</h2>
+      <div id="activityLog" class="activity-log"></div>
+    </div>
+
+    <div class="footer-meta">
+      Mirador Web SDK Solana demo · Gateway proxy: <span id="proxyStatus">checking…</span>
+    </div>
+
+  </div>
+
+  <script type="module" src="bundle.js"></script>
+</body>
+</html>
