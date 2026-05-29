@@ -5,10 +5,18 @@ import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gat
 import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
 
-// Helper to extract tx hash hints from FlushTraceData plugins
-function getTxHashHints(data: FlushTraceData) {
+// Helper to extract EVM tx hints from FlushTraceData plugins
+function getEvmTxHints(data: FlushTraceData) {
   return data.getPluginsList()
-    .map(p => p.getTxHashHints())
+    .map(p => p.getEvmTxHints())
+    .filter((h): h is NonNullable<typeof h> => h != null);
+}
+
+// Helper to extract Solana tx hints from FlushTraceData plugins
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getSolanaTxHints(data: FlushTraceData) {
+  return data.getPluginsList()
+    .map(p => p.getSolanaTxHints())
     .filter((h): h is NonNullable<typeof h> => h != null);
 }
 
@@ -258,7 +266,7 @@ describe('Trace', () => {
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
       const data = request.getData();
-      const hints = getTxHashHints(data!);
+      const hints = getEvmTxHints(data!);
       expect(hints.length).toBe(2);
       expect(hints[0].getTxHash()).toBe('0xabc123');
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
@@ -314,7 +322,7 @@ describe('Trace', () => {
       const data = request.getData();
       const attrsMap = data!.getAttributesList()[0].getAttributesMap();
       expect(attrsMap.get('wallet')).toBe('0xabc');
-      expect(getTxHashHints(data!).length).toBe(1);
+      expect(getEvmTxHints(data!).length).toBe(1);
       expect(data!.getTagsList()[0].getTagsList()).toContain('bridge');
 
       // Events: trace init + tx input data
@@ -477,7 +485,7 @@ describe('Trace', () => {
       expect(data!.getTagsList().length).toBe(1);
       // Events: 1 for trace init + 1 user event
       expect(data!.getEventsList().length).toBe(2);
-      expect(getTxHashHints(data!).length).toBe(1);
+      expect(getEvmTxHints(data!).length).toBe(1);
     });
 
     it('should flush immediately when flush() is called manually', async () => {
@@ -539,7 +547,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('simple string');
     });
 
@@ -569,7 +577,7 @@ describe('Trace', () => {
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
       expect(inputEvent).toBeDefined();
       expect(inputEvent!.getDetails()).toBe('0xa9059cbb...');
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('swap');
     });
   });
@@ -668,7 +676,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      expect(getTxHashHints(request.getData()!)).toHaveLength(1);
+      expect(getEvmTxHints(request.getData()!)).toHaveLength(1);
       const safeMsgHints = getSafeMsgHints(request.getData()!);
       expect(safeMsgHints).toHaveLength(1);
       expect(safeMsgHints[0].getMessageHash()).toBe('0xmsg123');
@@ -725,7 +733,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getTxHash()).toBe('0xabc');
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
     });
@@ -752,7 +760,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
       const events = request.getData()!.getEventsList();
       const inputEvent = events.find(e => e.getName() === 'Tx input data');
@@ -768,7 +776,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_POLYGON);
     });
 
@@ -924,7 +932,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);
@@ -939,7 +947,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getDetails()).toBe('swap tx');
     });
 
@@ -951,7 +959,7 @@ describe('Trace', () => {
       await flushPromises();
 
       const request = mockFlushTrace.mock.calls[0][0] as FlushTraceRequest;
-      const hints = getTxHashHints(request.getData()!);
+      const hints = getEvmTxHints(request.getData()!);
       expect(hints[0].getTxHash()).toBe('0xhash');
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_BASE);
       expect(hints[0].getDetails()).toBeFalsy();
@@ -1006,7 +1014,7 @@ describe('Trace', () => {
       expect(events[2].getDetails()).toBe('0xdata');
 
       // Tx hints with raw string details
-      const hints = getTxHashHints(data);
+      const hints = getEvmTxHints(data);
       expect(hints.length).toBe(1);
       expect(hints[0].getTxHash()).toBe('0xhash');
       expect(hints[0].getChain()).toBe(ProtoChain.CHAIN_ETHEREUM);

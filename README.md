@@ -25,6 +25,7 @@ npm install @miradorlabs/web-sdk
 - **Strict Ordering** - Flush calls maintain strict ordering even when async
 - **Cross-SDK Trace Sharing** - Resume traces across frontend and backend SDKs
 - **Safe Multisig Tracking** - Track Safe message and transaction confirmations via `web3.safe.addMsgHint()` and `web3.safe.addTxHint()`
+- **Solana Transaction Tracking** - Correlate Solana transactions to a trace via `web3.solana.addTxHint(signature)`
 - **Relay Bridge Tracking** - Track Relay (relay.link) intent-based bridges across chains via `web3.relay.addQuoteHint()` — backend processor emits the full lifecycle (deposit → solver-committed → fill / refund) as trace events
 - **EIP-1193 Provider Integration** - Send transactions directly through traces with `sendTransaction()`
 - **Wallet Discovery** - `MiradorProvider` auto-detects installed wallets via EIP-6963 (with legacy `window.ethereum` fallback) and tags each trace with the wallet that signed (name, rdns, version)
@@ -327,7 +328,7 @@ trace.addExistingStackTrace(stack, 'deferred_location', { reason: 'async operati
 
 #### Web3Plugin Methods
 
-The following methods are available when `Web3Plugin` is registered. They are accessed via the `web3.evm`, `web3.safe`, and `web3.relay` namespaces on the trace.
+The following methods are available when `Web3Plugin` is registered. They are accessed via the `web3.evm`, `web3.safe`, `web3.solana`, and `web3.relay` namespaces on the trace.
 
 ##### `web3.evm.addTxHint(txHash, chain, options?)`
 
@@ -363,6 +364,20 @@ Add a Safe transaction hint for tracking Safe multisig transaction executions.
 trace.web3.safe.addTxHint('0xsafeTxHash...', Chain.Ethereum);
 trace.web3.safe.addTxHint('0xotherHash...', Chain.Base, 'Token transfer');
 ```
+
+##### `web3.solana.addTxHint(signature, details?)`
+
+Correlate a Solana transaction to the trace. The `signature` is Solana's ed25519 transaction signature (base58, ~88 chars). No chain argument — the chain identity is implicit, since Solana lives outside the EVM `Chain` enum.
+
+```typescript
+trace.web3.solana.addTxHint(tx.signature);
+trace.web3.solana.addTxHint(tx.signature, 'Jupiter swap');
+```
+
+| Parameter   | Type     | Required | Description |
+|-------------|----------|----------|-------------|
+| `signature` | `string` | yes      | Solana transaction signature (base58) |
+| `details`   | `string` | no       | Optional free-form note attached to the hint |
 
 ##### `web3.relay.addQuoteHint(requestId, message?)`
 
@@ -464,7 +479,7 @@ await trace.close('User completed workflow');
 Returns: `Promise<void>`
 
 **Important:** Once a trace is closed:
-- All method calls (`addAttribute`, `addEvent`, `addTag`, `web3.evm.addTxHint`, `web3.safe.addMsgHint`, `web3.safe.addTxHint`, `flush`) will be ignored with a warning
+- All method calls (`addAttribute`, `addEvent`, `addTag`, `web3.evm.addTxHint`, `web3.safe.addMsgHint`, `web3.safe.addTxHint`, `web3.solana.addTxHint`, `web3.relay.addQuoteHint`, `flush`) will be ignored with a warning
 - The keep-alive timer will be stopped
 - A close request will be sent to the server
 
@@ -797,9 +812,12 @@ Chain.Arbitrum  // 42161
 Chain.Base      // 8453
 Chain.Optimism  // 10
 Chain.BSC       // 56
+Chain.HyperEVM  // 999
 ```
 
-All chain parameters accept `ChainInput` — either a `Chain` enum value or a chain name string (`'ethereum'`, `'polygon'`, etc.).
+All chain parameters accept `ChainInput` — either a `Chain` enum value or a chain name string (`'ethereum'`, `'polygon'`, `'hyperevm'`, etc.).
+
+> Solana is **not** part of the `Chain` enum — Solana doesn't have a numeric chain ID. Use `web3.solana.addTxHint(signature)` instead.
 
 ### `toChain(chainId)`
 
@@ -811,8 +829,9 @@ import { toChain, Chain } from '@miradorlabs/web-sdk';
 toChain(1);     // Chain.Ethereum
 toChain(137);   // Chain.Polygon
 toChain(42161); // Chain.Arbitrum
+toChain(999);   // Chain.HyperEVM
 toChain('0x1'); // Chain.Ethereum (hex string)
-toChain(999);   // undefined
+toChain(7777);  // undefined
 ```
 
 ## Automatic Client Metadata Collection

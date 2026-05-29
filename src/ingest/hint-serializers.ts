@@ -4,7 +4,8 @@
  */
 import {
   FlushTraceData,
-  TxHashHint as TxHashHintProto,
+  EvmTxHint as EvmTxHintProto,
+  SolanaTxHint as SolanaTxHintProto,
   SafeMsgHint as SafeMsgHintProto,
   SafeTxHint as SafeTxHintProto,
   RelayHint as RelayHintProto,
@@ -27,7 +28,7 @@ function resolveProtoChain(chain: number): ProtoChain {
 export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
   [HintType.TX_HASH]: (traceData, data) => {
     const hint = data as unknown as HintDataMap[typeof HintType.TX_HASH];
-    const hintMsg = new TxHashHintProto();
+    const hintMsg = new EvmTxHintProto();
     hintMsg.setTxHash(hint.txHash);
     hintMsg.setChain(resolveProtoChain(hint.chain));
     hintMsg.setChainId(hint.chain);
@@ -36,7 +37,7 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     ts.fromDate(hint.timestamp);
     hintMsg.setTimestamp(ts);
     const plugin = new FlushTraceData.Plugin();
-    plugin.setTxHashHints(hintMsg);
+    plugin.setEvmTxHints(hintMsg);
     traceData.addPlugins(plugin);
   },
 
@@ -67,6 +68,19 @@ export const HINT_SERIALIZERS: Record<string, HintSerializer> = {
     hintMsg.setTimestamp(ts);
     const plugin = new FlushTraceData.Plugin();
     plugin.setSafeTxHints(hintMsg);
+    traceData.addPlugins(plugin);
+  },
+
+  [HintType.SOLANA_TX]: (traceData, data) => {
+    const hint = data as unknown as HintDataMap[typeof HintType.SOLANA_TX];
+    const hintMsg = new SolanaTxHintProto();
+    hintMsg.setSignature(hint.signature);
+    if (hint.details) hintMsg.setDetails(hint.details);
+    const ts = new Timestamp();
+    ts.fromDate(hint.timestamp);
+    hintMsg.setTimestamp(ts);
+    const plugin = new FlushTraceData.Plugin();
+    plugin.setSolanaTxHints(hintMsg);
     traceData.addPlugins(plugin);
   },
 
