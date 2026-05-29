@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/miradorlabs/web-sdk/compare/v2.2.2...v2.3.0) (2026-05-29)
+
+
+### Features
+
+* **chains:** add solana tx support and hyperevm chain support ([34354bd](https://github.com/miradorlabs/web-sdk/commit/34354bd01e4b0dfbb1a8c961734765bb4159f8d7))
+* **chains:** add solana tx support and hyperevm chain support ([282685b](https://github.com/miradorlabs/web-sdk/commit/282685ba9eb721f661665cfd7e2881f4767cff9a))
+
 ## [2.2.2](https://github.com/miradorlabs/web-sdk/compare/v2.2.1...v2.2.2) (2026-05-22)
 
 
