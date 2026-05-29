@@ -25,7 +25,7 @@ An interactive demo showcasing how to integrate the Mirador Web SDK with Web3 wa
 ### 1. Install Demo Dependencies
 
 ```bash
-cd example
+cd examples/default
 npm install
 ```
 
@@ -143,9 +143,10 @@ To test transactions without spending real money:
 ### Project Structure
 
 ```
-example/
+examples/default/
 ├── index.html        # Main HTML with UI and styles
-├── app.js            # Application logic (wallet, transactions, traces)
+├── app.ts            # Application entry point — wires DOM event listeners
+├── src/              # Application logic (wallet, transactions, traces, etc.)
 ├── bundle.js         # Built bundle (generated)
 ├── proxy-server.js   # CORS proxy for Mirador gateway
 ├── rollup.config.js  # Rollup configuration
@@ -291,10 +292,10 @@ Switch to a supported network in your wallet. The demo will automatically detect
 Make sure you've built the parent SDK first:
 
 ```bash
-cd .. && npm install && npm run build
+cd ../.. && npm install && npm run build
 ```
 
 ## Learn More
 
-- [Mirador SDK Documentation](../README.md)
+- [Mirador SDK Documentation](../../README.md)
 - [EIP-6963 Specification](https://eips.ethereum.org/EIPS/eip-6963)

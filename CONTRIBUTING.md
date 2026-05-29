@@ -61,7 +61,7 @@ web-client/
 ├── src/           # Source code
 ├── tests/         # Test files
 ├── dist/          # Built output (generated)
-├── example/       # Example usage
+├── examples/      # Example apps (default = EVM multi-wallet, solana = Phantom)
 ├── scripts/       # Build and utility scripts
 └── index.ts       # Main entry point
 ```

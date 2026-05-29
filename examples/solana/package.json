@@ -1,0 +1,45 @@
+{
+  "name": "mirador-web-demo-solana",
+  "version": "1.0.0",
+  "description": "Mirador Web SDK — Solana tracing demo (Phantom + devnet SOL transfer)",
+  "type": "module",
+  "scripts": {
+    "build-sdk": "cd ../.. && npm install && npm run build",
+    "build": "npm run build-sdk && rollup -c",
+    "proxy": "node proxy-server.js",
+    "start": "npm run build && python3 -m http.server 8001",
+    "serve": "npm run build && npx http-server -a 127.0.0.1 -p 8001 -c-1 -o",
+    "dev": "npm run build && npx concurrently \"npm run proxy\" \"npx http-server -a 127.0.0.1 -p 8001 -c-1 -o\"",
+    "dev:no-proxy": "npm run build && npx http-server -a 127.0.0.1 -p 8001 -c-1 -o"
+  },
+  "keywords": [
+    "mirador",
+    "demo",
+    "web",
+    "tracing",
+    "solana"
+  ],
+  "author": "@miradorlabs",
+  "license": "ISC",
+  "devDependencies": {
+    "@rollup/plugin-alias": "^6.0.0",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.0",
+    "rollup": "^4.53.3",
+    "rollup-plugin-polyfill-node": "^0.13.0",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@miradorlabs/web-sdk": "file:../..",
+    "@solana/web3.js": "^1.95.0",
+    "concurrently": "^9.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.1",
+    "http-proxy-middleware": "^3.0.3"
+  }
+}

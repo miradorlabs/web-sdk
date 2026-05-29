@@ -4,7 +4,7 @@
   "description": "Interactive demo for Mirador Web SDK",
   "type": "module",
   "scripts": {
-    "build-sdk": "cd .. && npm install && npm run build",
+    "build-sdk": "cd ../.. && npm install && npm run build",
     "build": "npm run build-sdk && rollup -c",
     "proxy": "node proxy-server.js",
     "start": "npm run build && python3 -m http.server 8000",
@@ -30,7 +30,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@miradorlabs/web-sdk": "file:..",
+    "@miradorlabs/web-sdk": "file:../..",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
