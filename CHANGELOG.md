@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/miradorlabs/web-sdk/compare/v2.3.0...v2.4.0) (2026-06-02)
+
+
+### Features
+
+* **chains:** add canton network tx hint ([#89](https://github.com/miradorlabs/web-sdk/issues/89)) ([9fecc4e](https://github.com/miradorlabs/web-sdk/commit/9fecc4e9e3cd300940ff7b8d4a50fe5ccea24821))
+
 ## [2.3.0](https://github.com/miradorlabs/web-sdk/compare/v2.2.2...v2.3.0) (2026-05-29)
 
 
