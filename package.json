@@ -64,10 +64,10 @@
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
-    "@miradorlabs/plugins": "1.2.0",
+    "@miradorlabs/plugins": "1.3.0",
     "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
-    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.10.tgz",
+    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.11.tgz",
     "rxjs": "^7.8.2"
   },
   "author": "@mirador",

@@ -16,6 +16,7 @@ export type {
   SafeNamespaceMethods,
   SolanaNamespaceMethods,
   RelayNamespaceMethods,
+  CantonNamespaceMethods,
 } from './src/ingest';
 export { HintType } from './src/ingest';
 export type {
@@ -42,6 +43,7 @@ export type {
   SafeMsgHintData,
   SafeTxHintData,
   RelayQuoteHintData,
+  CantonTxHint,
   ChainName,
   ChainInput,
   AddEventOptions,
