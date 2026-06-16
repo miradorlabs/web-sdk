@@ -5,9 +5,9 @@ import {
   FlushTraceRequest,
   KeepAliveRequest,
   CloseTraceRequest,
-} from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+} from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
+import { IngestGatewayServiceClient } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
 import { Trace, NoopTrace } from './trace';
 import type { ClientOptions, TraceOptions, Logger, TraceCallbacks } from './types';
 import type { MiradorPlugin, MergedPluginMethods } from '@miradorlabs/plugins';

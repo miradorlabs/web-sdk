@@ -5,7 +5,7 @@ import dts from 'rollup-plugin-dts';
 import ts from 'typescript';
 
 /**
- * Transpiles the raw TypeScript proto stubs shipped by mirador-gateway-ingest-web.
+ * Transpiles the raw TypeScript proto stubs shipped by @miradorlabs/ingest-grpc-web.
  * That package publishes its grpc-web service client (`*ServiceClientPb.ts`) as
  * raw `.ts` with no compiled `.js`. Transpiling it here lets the stub be bundled
  * into dist/, so consumers never have to resolve/transpile a `.ts` from
@@ -15,7 +15,7 @@ function transpileDepTs() {
   return {
     name: 'transpile-dep-ts',
     transform(code, id) {
-      if (!id.includes('node_modules/mirador-gateway-ingest-web/') || !id.endsWith('.ts')) {
+      if (!id.includes('node_modules/@miradorlabs/ingest-grpc-web/') || !id.endsWith('.ts')) {
         return null;
       }
       const { outputText, sourceMapText } = ts.transpileModule(code, {
@@ -54,7 +54,7 @@ export default [
         sourceMap: true,
       }),
     ],
-    // mirador-gateway-ingest-web is intentionally NOT external: it ships its
+    // @miradorlabs/ingest-grpc-web is intentionally NOT external: it ships its
     // grpc-web service client as raw `.ts`, so it is transpiled and bundled in
     // (see transpileDepTs above). Leaving it external pushed an untranspilable
     // `.ts` from node_modules onto every consumer's bundler/runtime.
@@ -91,7 +91,7 @@ export default [
         sourceMap: true,
       }),
     ],
-    // mirador-gateway-ingest-web is bundled in (transpiled — see above), not
+    // @miradorlabs/ingest-grpc-web is bundled in (transpiled — see above), not
     // external. @miradorlabs/plugins and rxjs stay external as peer deps.
     external: [
       // Keep rxjs as external - it's commonly provided
@@ -112,8 +112,8 @@ export default [
       'rxjs',
       /^rxjs\/.*/,
       '@miradorlabs/plugins',
-      'mirador-gateway-ingest-web',
-      /^mirador-gateway-ingest-web\/.*/,
+      '@miradorlabs/ingest-grpc-web',
+      /^@miradorlabs\/ingest-grpc-web\/.*/,
     ],
   },
 ];
