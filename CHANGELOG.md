@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/miradorlabs/web-sdk/compare/v2.4.0...v2.4.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **deps:** release [@miradorlabs](https://github.com/miradorlabs) grpc migration and security audit updates ([#95](https://github.com/miradorlabs/web-sdk/issues/95)) ([14478a6](https://github.com/miradorlabs/web-sdk/commit/14478a6ac035ac982802a1166863537361400a93))
+
 ## [2.4.0](https://github.com/miradorlabs/web-sdk/compare/v2.3.0...v2.4.0) (2026-06-02)
 
 
