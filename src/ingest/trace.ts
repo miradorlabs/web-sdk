@@ -12,8 +12,8 @@ import {
   KeepAliveResponse,
   CloseTraceRequest,
   CloseTraceResponse,
-} from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
-import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
+} from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { ResponseStatus } from '@miradorlabs/ingest-grpc-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import type { TraceEvent, StackTrace, TraceCallbacks } from './types';
 import { Severity } from '@miradorlabs/plugins';

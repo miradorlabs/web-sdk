@@ -1,9 +1,9 @@
 // Mirador Client and Mirador Trace Unit Tests
 import { Client, Trace, captureStackTrace, toChain, Chain, MiradorProvider, Web3Plugin } from '../src/ingest';
 import type { StackTrace, EIP1193Provider, TransactionRequest, MiradorPlugin, Web3Methods } from '../src/ingest';
-import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/ingest_gateway_pb';
-import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
+import { IngestGatewayServiceClient } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
+import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { ResponseStatus } from '@miradorlabs/ingest-grpc-web/proto/gateway/common/v1/status_pb';
 
 // Helper to extract EVM tx hints from FlushTraceData plugins
 function getEvmTxHints(data: FlushTraceData) {
@@ -42,7 +42,7 @@ function getRelayHints(data: FlushTraceData) {
 }
 
 // Mock the gRPC-Web client
-jest.mock('mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
+jest.mock('@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
 
 // Mock fetch for IP lookup
 global.fetch = jest.fn().mockResolvedValue({

@@ -51,24 +51,27 @@
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^16.5.0",
     "husky": "^9.1.7",
-    "jest": "^30.2.0",
+    "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.2.0",
     "jiti": "^2.6.1",
     "prettier": "^3.8.1",
     "rollup": "^4.57.0",
     "rollup-plugin-dts": "^6.2.3",
-    "ts-jest": "^29.4.5",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "ts-proto": "^2.11.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
+    "@miradorlabs/ingest-grpc-web": "1.0.1",
     "@miradorlabs/plugins": "1.3.0",
     "google-protobuf": "^3.21.4",
     "grpc-web": "^2.0.2",
-    "mirador-gateway-ingest-web": "https://storage.googleapis.com/mirador-shd-packages/gateway/ingest/grpc-web/mirador-gateway-ingest-grpc-web-1.0.11.tgz",
     "rxjs": "^7.8.2"
+  },
+  "overrides": {
+    "js-yaml": "^4.2.0"
   },
   "author": "@mirador",
   "license": "MIT"

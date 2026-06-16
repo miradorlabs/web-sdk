@@ -45,7 +45,7 @@ src/
 
 ### Proto Dependency
 
-The gRPC types come from `mirador-gateway-ingest-web` (private package). Key imports:
+The gRPC types come from `@miradorlabs/ingest-grpc-web` (private package). Key imports:
 - `CreateTraceRequest`, `UpdateTraceRequest`, `TraceData`
 - `Attributes`, `Tags`, `Event`, `TxHashHint`, `Chain`
 

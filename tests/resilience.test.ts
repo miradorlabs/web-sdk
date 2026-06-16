@@ -1,9 +1,9 @@
 // Resilience feature tests for web-sdk
 import { Client, Trace, NoopTrace, Web3Plugin } from '../src/ingest';
-import { IngestGatewayServiceClient } from 'mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { ResponseStatus } from 'mirador-gateway-ingest-web/proto/gateway/common/v1/status_pb';
+import { IngestGatewayServiceClient } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
+import { ResponseStatus } from '@miradorlabs/ingest-grpc-web/proto/gateway/common/v1/status_pb';
 
-jest.mock('mirador-gateway-ingest-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
+jest.mock('@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb');
 
 global.fetch = jest.fn().mockResolvedValue({
   ok: true,
