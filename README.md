@@ -1040,23 +1040,23 @@ The package provides multiple module formats:
 ### Building
 
 ```bash
-npm run build
+pnpm build
 ```
 
 ### Testing
 
 ```bash
-npm test
-npm run test:watch
-npm run test:coverage
+pnpm test
+pnpm test:watch
+pnpm test:coverage
 ```
 
 ### Publishing
 
 ```bash
-npm run release:patch  # 1.0.x
-npm run release:minor  # 1.x.0
-npm run release:major  # x.0.0
+pnpm release:patch  # 1.0.x
+pnpm release:minor  # 1.x.0
+pnpm release:major  # x.0.0
 ```
 
 ## Example Applications
