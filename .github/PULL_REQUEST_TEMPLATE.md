@@ -25,8 +25,8 @@
 - [ ] I have read the [Contributing Guidelines](./CONTRIBUTING.md)
 - [ ] My code follows the project's coding style
 - [ ] I have added/updated tests that prove my fix is effective or my feature works
-- [ ] All new and existing tests pass locally (`npm test`)
-- [ ] I have run the linter (`npm run lint`)
+- [ ] All new and existing tests pass locally (`pnpm test`)
+- [ ] I have run the linter (`pnpm lint`)
 - [ ] I have updated documentation if needed
 - [ ] My changes don't introduce new warnings or errors
 
