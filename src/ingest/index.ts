@@ -6,6 +6,7 @@
 // Classes
 export { Client } from './client';
 export { Trace, NoopTrace } from './trace';
+export { Span } from './span';
 export { MiradorProvider } from './provider';
 
 // Stack trace utilities
@@ -54,6 +55,9 @@ export type {
   StackTrace,
   MiradorProviderOptions,
   TraceCallbacks,
+  SpanStatus,
+  SpanOptions,
+  SpanEndOptions,
 } from './types';
 
 // Metadata utilities (for advanced usage)

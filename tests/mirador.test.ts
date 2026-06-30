@@ -1641,6 +1641,107 @@ describe('Trace', () => {
       expect(details.data).toBeUndefined();
     });
   });
+
+  describe('spans', () => {
+    // Aggregate across all flush calls so tests don't depend on flush batching.
+    const allData = () => mockFlushTrace.mock.calls
+      .map(c => (c[0] as FlushTraceRequest).getData())
+      .filter((d): d is FlushTraceData => d != null);
+    const allSpanStarts = () => allData().flatMap(d => d.getSpanStartsList());
+    const allSpanEnds = () => allData().flatMap(d => d.getSpanEndsList());
+    const allEvents = () => allData().flatMap(d => d.getEventsList());
+    const settle = async () => { await flushMicrotasks(); await flushPromises(); };
+
+    it('emits SpanStart and SpanEnd for a span', async () => {
+      const trace = client.trace({ name: 't' });
+      const span = trace.startSpan('swap', { attributes: { dex: 'uniswap' } });
+      span.end({ status: 'OK' });
+      trace.flush();
+      await settle();
+
+      const starts = allSpanStarts();
+      expect(starts).toHaveLength(1);
+      expect(starts[0].getSpanId()).toMatch(/^[0-9a-f]{16}$/);
+      expect(starts[0].getSpanId()).toBe(span.id);
+      expect(starts[0].getName()).toBe('swap');
+      expect(starts[0].getParentSpanId()).toBe('');
+      expect(starts[0].getAttributesMap().get('dex')).toBe('uniswap');
+
+      const ends = allSpanEnds();
+      expect(ends).toHaveLength(1);
+      expect(ends[0].getSpanId()).toBe(span.id);
+      expect(ends[0].getStatusCode()).toBe('OK');
+    });
+
+    it('parents a child span to its parent span', async () => {
+      const trace = client.trace();
+      const parent = trace.startSpan('parent');
+      const child = parent.startSpan('child');
+      child.end();
+      parent.end();
+      trace.flush();
+      await settle();
+
+      expect(allSpanStarts().find(s => s.getName() === 'child')!.getParentSpanId()).toBe(parent.id);
+      expect(allSpanStarts().find(s => s.getName() === 'parent')!.getParentSpanId()).toBe('');
+    });
+
+    it('tags ambient events with the active span and leaves others trace-level', async () => {
+      const trace = client.trace();
+      const span = trace.startSpan('op');
+      trace.info('inside');
+      span.end();
+      trace.info('outside');
+      trace.flush();
+      await settle();
+
+      expect(allEvents().find(e => e.getName() === 'inside')!.getSpanId()).toBe(span.id);
+      expect(allEvents().find(e => e.getName() === 'outside')!.getSpanId()).toBe('');
+    });
+
+    it('span.addEvent tags the event with that span id', async () => {
+      const trace = client.trace();
+      const span = trace.startSpan('op');
+      span.addEvent('explicit');
+      span.end();
+      trace.flush();
+      await settle();
+
+      expect(allEvents().find(e => e.getName() === 'explicit')!.getSpanId()).toBe(span.id);
+    });
+
+    it('span(name, fn) auto-ends OK and returns the value (sync)', async () => {
+      const trace = client.trace();
+      const result = trace.span('work', (s) => { s.addEvent('step'); return 42; });
+      expect(result).toBe(42);
+      trace.flush();
+      await settle();
+
+      expect(allSpanStarts()).toHaveLength(1);
+      expect(allSpanEnds()[0].getStatusCode()).toBe('OK');
+    });
+
+    it('span(name, fn) sets ERROR + message and rethrows', async () => {
+      const trace = client.trace();
+      expect(() => trace.span('boom', () => { throw new Error('nope'); })).toThrow('nope');
+      trace.flush();
+      await settle();
+
+      const ends = allSpanEnds();
+      expect(ends[0].getStatusCode()).toBe('ERROR');
+      expect(ends[0].getStatusMessage()).toBe('nope');
+    });
+
+    it('span(name, fn) awaits an async fn and ends OK', async () => {
+      const trace = client.trace();
+      const result = await trace.span('async-work', async (s) => { s.addEvent('async-step'); return 'done'; });
+      expect(result).toBe('done');
+      trace.flush();
+      await settle();
+
+      expect(allSpanEnds().some(e => e.getStatusCode() === 'OK')).toBe(true);
+    });
+  });
 });
 
 describe('toChain', () => {

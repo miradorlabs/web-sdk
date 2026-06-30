@@ -1,5 +1,5 @@
 // Core SDK exports
-export { Client, Trace, NoopTrace, MiradorProvider } from './src/ingest';
+export { Client, Trace, NoopTrace, Span, MiradorProvider } from './src/ingest';
 
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
@@ -56,5 +56,8 @@ export type {
   MiradorProviderOptions,
   Logger,
   TraceCallbacks,
+  SpanStatus,
+  SpanOptions,
+  SpanEndOptions,
 } from './src/ingest';
 
