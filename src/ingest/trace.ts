@@ -10,6 +10,7 @@ import {
   Event,
   SpanStart,
   SpanEnd,
+  SpanStatusCode,
   KeepAliveRequest,
   KeepAliveResponse,
   CloseTraceRequest,
@@ -17,7 +18,7 @@ import {
 } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from '@miradorlabs/ingest-grpc-web/proto/gateway/common/v1/status_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
-import type { TraceEvent, StackTrace, TraceCallbacks, SpanOptions, SpanEndOptions } from './types';
+import type { TraceEvent, StackTrace, TraceCallbacks, SpanOptions, SpanEndOptions, SpanStatus } from './types';
 import { Severity } from '@miradorlabs/plugins';
 import type { AddEventOptions, Logger } from '@miradorlabs/plugins';
 import type { MiradorPlugin, TraceContext, FlushBuilder } from '@miradorlabs/plugins';
@@ -37,7 +38,7 @@ interface PendingSpanStart {
 interface PendingSpanEnd {
   spanId: string;
   timestamp: Date;
-  statusCode?: string;
+  status?: SpanStatus;
   statusMessage?: string;
 }
 
@@ -54,6 +55,15 @@ function generateSpanId(): string {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Map the ergonomic SpanStatus string to the proto SpanStatusCode enum. */
+function toSpanStatusCode(status?: SpanStatus): SpanStatusCode {
+  switch (status) {
+    case 'OK': return SpanStatusCode.SPAN_STATUS_CODE_OK;
+    case 'ERROR': return SpanStatusCode.SPAN_STATUS_CODE_ERROR;
+    default: return SpanStatusCode.SPAN_STATUS_CODE_UNSPECIFIED; // 'UNSET' / undefined
+  }
 }
 
 /** Map plugins Severity to proto Event.Severity */
@@ -614,7 +624,7 @@ export class Trace {
     this.pendingSpanEnds.push({
       spanId,
       timestamp: new Date(),
-      statusCode: options?.status,
+      status: options?.status,
       statusMessage: options?.message,
     });
     this.scheduleFlush();
@@ -890,9 +900,7 @@ export class Trace {
       const ts = new Timestamp();
       ts.fromDate(span.timestamp);
       spanMsg.setTimestamp(ts);
-      if (span.statusCode) {
-        spanMsg.setStatusCode(span.statusCode);
-      }
+      spanMsg.setStatus(toSpanStatusCode(span.status));
       if (span.statusMessage) {
         spanMsg.setStatusMessage(span.statusMessage);
       }

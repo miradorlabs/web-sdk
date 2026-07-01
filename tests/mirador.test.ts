@@ -2,7 +2,7 @@
 import { Client, Trace, captureStackTrace, toChain, Chain, MiradorProvider, Web3Plugin } from '../src/ingest';
 import type { StackTrace, EIP1193Provider, TransactionRequest, MiradorPlugin, Web3Methods } from '../src/ingest';
 import { IngestGatewayServiceClient } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
-import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
+import { FlushTraceRequest, FlushTraceData, Chain as ProtoChain, SpanStatusCode } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { ResponseStatus } from '@miradorlabs/ingest-grpc-web/proto/gateway/common/v1/status_pb';
 
 // Helper to extract EVM tx hints from FlushTraceData plugins
@@ -1670,7 +1670,7 @@ describe('Trace', () => {
       const ends = allSpanEnds();
       expect(ends).toHaveLength(1);
       expect(ends[0].getSpanId()).toBe(span.id);
-      expect(ends[0].getStatusCode()).toBe('OK');
+      expect(ends[0].getStatus()).toBe(SpanStatusCode.SPAN_STATUS_CODE_OK);
     });
 
     it('parents a child span to its parent span', async () => {
@@ -1718,7 +1718,7 @@ describe('Trace', () => {
       await settle();
 
       expect(allSpanStarts()).toHaveLength(1);
-      expect(allSpanEnds()[0].getStatusCode()).toBe('OK');
+      expect(allSpanEnds()[0].getStatus()).toBe(SpanStatusCode.SPAN_STATUS_CODE_OK);
     });
 
     it('span(name, fn) sets ERROR + message and rethrows', async () => {
@@ -1728,7 +1728,7 @@ describe('Trace', () => {
       await settle();
 
       const ends = allSpanEnds();
-      expect(ends[0].getStatusCode()).toBe('ERROR');
+      expect(ends[0].getStatus()).toBe(SpanStatusCode.SPAN_STATUS_CODE_ERROR);
       expect(ends[0].getStatusMessage()).toBe('nope');
     });
 
@@ -1739,7 +1739,7 @@ describe('Trace', () => {
       trace.flush();
       await settle();
 
-      expect(allSpanEnds().some(e => e.getStatusCode() === 'OK')).toBe(true);
+      expect(allSpanEnds().some(e => e.getStatus() === SpanStatusCode.SPAN_STATUS_CODE_OK)).toBe(true);
     });
   });
 });
