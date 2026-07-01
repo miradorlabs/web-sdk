@@ -46,6 +46,7 @@ npm install @miradorlabs/web-sdk
 - **Keep-Alive** - Automatic periodic pings with in-flight guard, single retry, and auto-stop after 3 consecutive failures
 - **Trace Lifecycle** - Explicit close trace method with automatic cleanup and flush queue draining
 - **Fluent Builder Pattern** - Method chaining for building traces
+- **Spans** - Time and nest units of work with `trace.startSpan()` / `trace.span(name, fn)`; events nest under the active span
 - **Browser-optimized** - Automatic client metadata collection (browser, OS, etc.)
 - **Blockchain Integration** - Built-in support for correlating traces with blockchain transactions
 - **Stack Trace Capture** - Automatic or manual capture of call stack for debugging
@@ -354,6 +355,56 @@ trace.addExistingStackTrace(stack, 'deferred_location', { reason: 'async operati
 | `stackTrace`        | `StackTrace` | Previously captured stack trace                  |
 | `eventName`         | `string`     | Event name (defaults to "stack_trace")           |
 | `additionalDetails` | `object`     | Optional additional details to include           |
+
+#### `startSpan(name, options?)` / `span(name, fn)`
+
+Spans are timed, nestable units of work within a trace. Events recorded while a span is open nest under it in the trace timeline.
+
+`startSpan()` opens a span and returns a `Span` handle; call `span.end()` to close it:
+
+```typescript
+const span = trace.startSpan('swap_quote', { attributes: { dex: 'uniswap' } });
+span.setAttribute('amountIn', '1.5');
+span.info('quote_received', { price: '3200.50' });
+span.end({ status: 'OK' });
+```
+
+| Parameter | Type          | Description                                          |
+|-----------|---------------|-----------------------------------------------------|
+| `name`    | `string`      | Span name                                            |
+| `options` | `SpanOptions` | Optional `parentSpanId` and/or initial `attributes` |
+
+`span(name, fn)` runs a function inside a span that ends automatically — status `OK` when it returns, or `ERROR` (with the error message) when it throws. Works with sync and async functions and returns the function's result:
+
+```typescript
+const quote = await trace.span('fetch_quote', async (span) => {
+  span.setAttribute('pair', 'ETH/USDC');
+  return await getQuote();   // throws → span ends ERROR and rethrows
+});
+```
+
+**Nesting** — a span opened via `trace.startSpan()` parents to the innermost open span (or the trace root); open a child directly from a span with `span.startSpan()`:
+
+```typescript
+await trace.span('checkout', async (checkout) => {
+  const charge = checkout.startSpan('charge');
+  await chargeCard();
+  charge.end({ status: 'OK' });
+});
+```
+
+**Span methods:**
+
+| Method | Description |
+|--------|-------------|
+| `setAttribute(key, value)` / `setAttributes(obj)` | Set span attributes (before the span first flushes) |
+| `addEvent(name, details?, options?)`              | Record an event nested under the span |
+| `info(...)` / `warn(...)` / `error(...)`          | Event shortcuts with severity |
+| `startSpan(name, options?)`                       | Open a child span |
+| `end(options?)`                                   | End the span; `options` = `{ status?: 'OK' \| 'ERROR' \| 'UNSET', message?: string }` |
+| `id`                                              | The W3C span id (16 hex chars) |
+
+> Ambient nesting (`trace.info()` attaching to the open span) is reliable in synchronous code. In concurrent async code, prefer the span's own methods (`span.info()`) for precise attribution.
 
 #### Web3Plugin Methods
 
