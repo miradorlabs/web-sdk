@@ -17,6 +17,7 @@ Browser SDK for [Mirador](https://mirador.org) — cross-chain observability for
 - [API Reference](#api-reference)
   - [Client](#client)
   - [Trace (Builder)](#trace-builder)
+  - [Spans](#spans)
 - [Logger](#logger)
 - [Lifecycle Callbacks (TraceCallbacks)](#lifecycle-callbacks-tracecallbacks)
 - [Sampling](#sampling)
@@ -356,9 +357,9 @@ trace.addExistingStackTrace(stack, 'deferred_location', { reason: 'async operati
 | `eventName`         | `string`     | Event name (defaults to "stack_trace")           |
 | `additionalDetails` | `object`     | Optional additional details to include           |
 
-#### `startSpan(name, options?)` / `span(name, fn)`
+#### Spans
 
-Spans are timed, nestable units of work within a trace. Events recorded while a span is open nest under it in the trace timeline.
+Open a span with `startSpan(name, options?)`, or wrap a function with `span(name, fn)`. Spans are timed, nestable units of work within a trace. Events recorded while a span is open nest under it in the trace timeline.
 
 `startSpan()` opens a span and returns a `Span` handle; call `span.end()` to close it:
 
