@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/miradorlabs/web-sdk/compare/v2.4.1...v2.5.0) (2026-07-01)
+
+
+### Features
+
+* **span:** add span support to web sdk ([#102](https://github.com/miradorlabs/web-sdk/issues/102)) ([8ed4374](https://github.com/miradorlabs/web-sdk/commit/8ed437407b0619c57b2d9183ceae499845cc3493))
+
 ## [2.4.1](https://github.com/miradorlabs/web-sdk/compare/v2.4.0...v2.4.1) (2026-06-16)
 
 
