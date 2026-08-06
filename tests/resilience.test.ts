@@ -40,27 +40,27 @@ describe('Sampling', () => {
   });
 
   it('sampleRate 0 should return NoopTrace', () => {
-    const client = new Client('key', { sampleRate: 0 });
+    const client = new Client('mir_web_key', { sampleRate: 0 });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(NoopTrace);
     expect(trace.getTraceId()).toBe('0'.repeat(32));
   });
 
   it('sampleRate 1 should return Trace', () => {
-    const client = new Client('key', { sampleRate: 1 });
+    const client = new Client('mir_web_key', { sampleRate: 1 });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(Trace);
     expect(trace).not.toBeInstanceOf(NoopTrace);
   });
 
   it('custom sampler returning false should return NoopTrace', () => {
-    const client = new Client('key', { sampler: () => false });
+    const client = new Client('mir_web_key', { sampler: () => false });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(NoopTrace);
   });
 
   it('custom sampler returning true should return Trace', () => {
-    const client = new Client('key', { sampler: () => true });
+    const client = new Client('mir_web_key', { sampler: () => true });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(Trace);
     expect(trace).not.toBeInstanceOf(NoopTrace);
@@ -68,21 +68,21 @@ describe('Sampling', () => {
 
   it('custom sampler receives trace options', () => {
     const sampler = jest.fn().mockReturnValue(true);
-    const client = new Client('key', { sampler });
+    const client = new Client('mir_web_key', { sampler });
     client.trace({ name: 'CriticalFlow' });
     expect(sampler).toHaveBeenCalledWith(expect.objectContaining({ name: 'CriticalFlow' }));
   });
 
   it('sampler takes precedence over sampleRate', () => {
-    const client = new Client('key', { sampleRate: 0, sampler: () => true });
+    const client = new Client('mir_web_key', { sampleRate: 0, sampler: () => true });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(Trace);
     expect(trace).not.toBeInstanceOf(NoopTrace);
   });
 
   it('invalid sampleRate should throw', () => {
-    expect(() => new Client('key', { sampleRate: -0.1 })).toThrow('sampleRate must be between 0 and 1');
-    expect(() => new Client('key', { sampleRate: 1.5 })).toThrow('sampleRate must be between 0 and 1');
+    expect(() => new Client('mir_web_key', { sampleRate: -0.1 })).toThrow('sampleRate must be between 0 and 1');
+    expect(() => new Client('mir_web_key', { sampleRate: 1.5 })).toThrow('sampleRate must be between 0 and 1');
   });
 });
 
@@ -104,7 +104,7 @@ describe('NoopTrace', () => {
   });
 
   it('all plugin methods are no-ops when initialized via Client', () => {
-    const client = new Client('key', { sampleRate: 0, plugins: [Web3Plugin()] });
+    const client = new Client('mir_web_key', { sampleRate: 0, plugins: [Web3Plugin()] });
     const trace = client.trace({ name: 'Test' });
     expect(trace).toBeInstanceOf(NoopTrace);
     expect(trace.web3.evm.addTxHint('0x', 'ethereum')).toBe(trace);
@@ -132,7 +132,7 @@ describe('NoopTrace', () => {
   });
 
   it('sendTransaction returns empty string instead of throwing', async () => {
-    const client = new Client('key', { sampleRate: 0, plugins: [Web3Plugin()] });
+    const client = new Client('mir_web_key', { sampleRate: 0, plugins: [Web3Plugin()] });
     const trace = client.trace({ name: 'Test' });
     const result = await trace.web3.evm.sendTransaction({ from: '0x' });
     expect(result).toBe('');
@@ -157,7 +157,7 @@ describe('Lifecycle Callbacks', () => {
 
   it('onCreated is called only on first successful flush', async () => {
     const onCreated = jest.fn();
-    const client = new Client('key', { callbacks: { onCreated } });
+    const client = new Client('mir_web_key', { callbacks: { onCreated } });
     const trace = client.trace({ name: 'Test' });
 
     // First flush — should trigger onCreated
@@ -178,7 +178,7 @@ describe('Lifecycle Callbacks', () => {
 
   it('onFlushed is called after successful flush', async () => {
     const onFlushed = jest.fn();
-    const client = new Client('key', { callbacks: { onFlushed } });
+    const client = new Client('mir_web_key', { callbacks: { onFlushed } });
     const trace = client.trace({ name: 'Test' });
 
     trace.addEvent('test_event');
@@ -192,7 +192,7 @@ describe('Lifecycle Callbacks', () => {
     const onFlushError = jest.fn();
     mockFlushTrace.mockRejectedValue(new Error('network error'));
 
-    const client = new Client('key', { callbacks: { onFlushError } });
+    const client = new Client('mir_web_key', { callbacks: { onFlushError } });
     const trace = client.trace({ name: 'Test' });
     // Set maxRetries to 0 to avoid retry delays
     (trace as unknown as { maxRetries: number }).maxRetries = 0;
@@ -206,7 +206,7 @@ describe('Lifecycle Callbacks', () => {
 
   it('onClosed is called after close', async () => {
     const onClosed = jest.fn();
-    const client = new Client('key', { callbacks: { onClosed } });
+    const client = new Client('mir_web_key', { callbacks: { onClosed } });
     const trace = client.trace({ name: 'Test' });
 
     // Let initial flush complete
@@ -220,7 +220,7 @@ describe('Lifecycle Callbacks', () => {
 
   it('onDropped is called when queue is full', () => {
     const onDropped = jest.fn();
-    const client = new Client('key', { callbacks: { onDropped } });
+    const client = new Client('mir_web_key', { callbacks: { onDropped } });
     const trace = client.trace({ name: 'Test', maxQueueSize: 5 });
 
     for (let i = 0; i < 10; i++) {
@@ -234,7 +234,7 @@ describe('Lifecycle Callbacks', () => {
     const clientOnFlushed = jest.fn();
     const traceOnFlushed = jest.fn();
 
-    const client = new Client('key', { callbacks: { onFlushed: clientOnFlushed } });
+    const client = new Client('mir_web_key', { callbacks: { onFlushed: clientOnFlushed } });
     const trace = client.trace({ name: 'Test', callbacks: { onFlushed: traceOnFlushed } });
 
     trace.addEvent('test');
@@ -256,7 +256,7 @@ describe('Queue Size Limits', () => {
 
   it('drops items when queue exceeds maxQueueSize', () => {
     const onDropped = jest.fn();
-    const client = new Client('key', { callbacks: { onDropped } });
+    const client = new Client('mir_web_key', { callbacks: { onDropped } });
     const trace = client.trace({ name: 'Test', maxQueueSize: 3 });
 
     trace.addEvent('e1');
@@ -281,7 +281,7 @@ describe('Rate Limiting', () => {
       flushTrace: mockFlushTrace,
     }));
 
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({ name: 'Test' });
     (trace as unknown as { maxRetries: number }).maxRetries = 0;
 
@@ -310,7 +310,7 @@ describe('Max Trace Lifetime', () => {
   });
 
   it('auto-closes trace after maxTraceLifetimeMs', async () => {
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({ name: 'Test', maxTraceLifetimeMs: 5000 });
 
     expect(trace.isClosed()).toBe(false);
@@ -321,7 +321,7 @@ describe('Max Trace Lifetime', () => {
   });
 
   it('works even when autoKeepAlive is false (resumed trace)', async () => {
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({
       name: 'Test',
       traceId: 'a'.repeat(32),
@@ -336,7 +336,7 @@ describe('Max Trace Lifetime', () => {
   });
 
   it('does not fire when maxTraceLifetimeMs is 0 (disabled)', async () => {
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({ name: 'Test', maxTraceLifetimeMs: 0 });
 
     await jest.advanceTimersByTimeAsync(60000);
@@ -361,7 +361,7 @@ describe('Overflow Batch Splitting', () => {
   });
 
   it('splits large flushes into multiple batches', async () => {
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({ name: 'Test' });
 
     for (let i = 0; i < 110; i++) {
@@ -388,7 +388,7 @@ describe('Logger', () => {
 
   it('custom logger receives warning on closed trace', async () => {
     const customLogger = { debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
-    const client = new Client('key', { logger: customLogger });
+    const client = new Client('mir_web_key', { logger: customLogger });
     const trace = client.trace({ name: 'Test' });
 
     await flushMicrotasks();
@@ -404,7 +404,7 @@ describe('Logger', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
     const errorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    const client = new Client('key');
+    const client = new Client('mir_web_key');
     const trace = client.trace({ name: 'Test' });
 
     (trace as unknown as { closed: boolean }).closed = true;
@@ -437,7 +437,7 @@ describe('Close drain timeout', () => {
       closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
     }));
 
-    const client = new Client('key', { logger: customLogger });
+    const client = new Client('mir_web_key', { logger: customLogger });
     const trace = client.trace({ name: 'Test' });
 
     trace.addEvent('test');
