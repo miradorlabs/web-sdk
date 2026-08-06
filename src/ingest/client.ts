@@ -3,11 +3,15 @@
  */
 import {
   FlushTraceRequest,
+  FlushTraceResponse,
   KeepAliveRequest,
+  KeepAliveResponse,
   CloseTraceRequest,
+  CloseTraceResponse,
 } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/ingest_gateway_pb';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { IngestGatewayServiceClient } from '@miradorlabs/ingest-grpc-web/proto/gateway/ingest/v1/Ingest_gatewayServiceClientPb';
+import { assertWebApiKey, hasApiKey } from './api-key';
 import { Trace, NoopTrace } from './trace';
 import type { ClientOptions, TraceOptions, Logger, TraceCallbacks } from './types';
 import type { MiradorPlugin, MergedPluginMethods } from '@miradorlabs/plugins';
@@ -56,6 +60,8 @@ export class Client<P extends readonly MiradorPlugin<object>[] = []> {
   public keepAliveIntervalMs: number;
   private callTimeoutMs: number;
   private client: IngestGatewayServiceClient;
+  /** No API key was supplied — every RPC is a no-op and `trace()` returns a NoopTrace. */
+  private readonly disabled: boolean;
 
   /** @internal */ readonly logger: Logger;
   /** @internal */ readonly callbacks?: TraceCallbacks;
@@ -92,12 +98,30 @@ export class Client<P extends readonly MiradorPlugin<object>[] = []> {
       this.logger = NOOP_LOGGER;
     }
 
+    // Validate before any request is made. A malformed key can only be rejected
+    // anonymously by the gateway, so catch it here where the cause is knowable.
+    if (hasApiKey(apiKey)) {
+      assertWebApiKey(apiKey);
+      this.disabled = false;
+    } else {
+      this.disabled = true;
+      this.logger.warn('[mirador] no API key provided — tracing is disabled');
+    }
+
     const credentials = { 'x-ingest-api-key': apiKey };
     this.client = new IngestGatewayServiceClient(this.apiUrl, credentials);
   }
 
+  /** Build a NoopTrace with plugin methods merged, for sampled-out or disabled clients. */
+  private noopTrace(): Trace & MergedPluginMethods<[...P], Trace> {
+    const noop = new NoopTrace();
+    noop._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
+    return noop as Trace & MergedPluginMethods<[...P], Trace>;
+  }
+
   /** @internal */
   async _flushTrace(request: FlushTraceRequest) {
+    if (this.disabled) return new FlushTraceResponse();
     const metadata = { 'x-ingest-api-key': this.apiKey };
     const timestamp = new Timestamp();
     timestamp.fromDate(new Date());
@@ -107,12 +131,14 @@ export class Client<P extends readonly MiradorPlugin<object>[] = []> {
 
   /** @internal */
   async _keepAlive(request: KeepAliveRequest) {
+    if (this.disabled) return new KeepAliveResponse();
     const metadata = { 'x-ingest-api-key': this.apiKey };
     return await this.client.keepAlive(request, metadata);
   }
 
   /** @internal */
   async _closeTrace(request: CloseTraceRequest) {
+    if (this.disabled) return new CloseTraceResponse();
     const metadata = { 'x-ingest-api-key': this.apiKey };
     return await this.client.closeTrace(request, metadata);
   }
@@ -124,19 +150,20 @@ export class Client<P extends readonly MiradorPlugin<object>[] = []> {
    * @returns A Trace builder instance (or NoopTrace if sampled out), with plugin methods merged
    */
   trace(options?: TraceOptions): Trace & MergedPluginMethods<[...P], Trace> {
+    // No API key: never touch the network.
+    if (this.disabled) {
+      return this.noopTrace();
+    }
+
     // Sampling: check if this trace should be sampled out
     const traceOptions = options ?? {};
     if (this.sampler) {
       if (!this.sampler(traceOptions)) {
-        const noop = new NoopTrace();
-        noop._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
-        return noop as Trace & MergedPluginMethods<[...P], Trace>;
+        return this.noopTrace();
       }
     } else if (this.sampleRate < 1) {
       if (Math.random() >= this.sampleRate) {
-        const noop = new NoopTrace();
-        noop._initPlugins(this.plugins as unknown as MiradorPlugin<object>[]);
-        return noop as Trace & MergedPluginMethods<[...P], Trace>;
+        return this.noopTrace();
       }
     }
 

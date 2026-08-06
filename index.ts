@@ -1,6 +1,9 @@
 // Core SDK exports
 export { Client, Trace, NoopTrace, Span, MiradorProvider } from './src/ingest';
 
+// API key validation
+export { MiradorApiKeyError, WEB_KEY_PREFIX, SERVER_KEY_PREFIX } from './src/ingest';
+
 // Stack trace utilities
 export { captureStackTrace, formatStackTrace, formatStackTraceReadable } from './src/ingest';
 

@@ -89,24 +89,24 @@ describe('Client', () => {
 
   describe('constructor', () => {
     it('should create a Client instance with API key', () => {
-      const client = new Client('my-api-key');
+      const client = new Client('mir_web_my-api-key');
       expect(client).toBeInstanceOf(Client);
-      expect(client.apiKey).toBe('my-api-key');
+      expect(client.apiKey).toBe('mir_web_my-api-key');
     });
 
     it('should use default gateway URL when not provided', () => {
-      const client = new Client('my-api-key');
+      const client = new Client('mir_web_my-api-key');
       expect(client.apiUrl).toBe('https://ingest.mirador.org:443');
     });
 
     it('should use custom gateway URL when provided', () => {
       const customUrl = 'https://custom-gateway.example.com:443';
-      const client = new Client('my-api-key', { apiUrl: customUrl });
+      const client = new Client('mir_web_my-api-key', { apiUrl: customUrl });
       expect(client.apiUrl).toBe(customUrl);
     });
 
     it('should initialize gRPC client with credentials', () => {
-      const apiKey = 'test-key';
+      const apiKey = 'mir_web_test-key';
       new Client(apiKey);
 
       expect(IngestGatewayServiceClient).toHaveBeenCalledWith(
@@ -118,13 +118,13 @@ describe('Client', () => {
 
   describe('trace()', () => {
     it('should return a Trace instance', () => {
-      const client = new Client('test-key');
+      const client = new Client('mir_web_test-key');
       const trace = client.trace({ name: 'TestTrace' });
       expect(trace).toBeInstanceOf(Trace);
     });
 
     it('should work without options', () => {
-      const client = new Client('test-key');
+      const client = new Client('mir_web_test-key');
       const trace = client.trace();
       expect(trace).toBeInstanceOf(Trace);
     });
@@ -148,7 +148,7 @@ describe('Trace', () => {
       flushTrace: mockFlushTrace,
     }));
 
-    client = new Client('test-api-key', { plugins: [Web3Plugin()] });
+    client = new Client('mir_web_test-api-key', { plugins: [Web3Plugin()] });
   });
 
   describe('builder methods (chaining)', () => {
@@ -392,7 +392,7 @@ describe('Trace', () => {
       mockFlushTrace.mockRejectedValue(new Error('Connection failed'));
 
       // Create client with debug: true so console.error is actually called
-      const debugClient = new Client('test-api-key', { debug: true });
+      const debugClient = new Client('mir_web_test-api-key', { debug: true });
       const trace = debugClient.trace({ name: 'TestTrace', maxRetries: 0 })
         .addAttribute('key', 'value');
 
@@ -897,13 +897,13 @@ describe('Trace', () => {
 
   describe('backwards compatibility', () => {
     it('Client constructor without provider works with just key', () => {
-      const c = new Client('key');
+      const c = new Client('mir_web_key');
       expect(c).toBeInstanceOf(Client);
-      expect(c.apiKey).toBe('key');
+      expect(c.apiKey).toBe('mir_web_key');
     });
 
     it('Client constructor without provider works with apiUrl option', () => {
-      const c = new Client('key', { apiUrl: 'https://custom.example.com' });
+      const c = new Client('mir_web_key', { apiUrl: 'https://custom.example.com' });
       expect(c).toBeInstanceOf(Client);
       expect(c.apiUrl).toBe('https://custom.example.com');
     });
@@ -1086,7 +1086,7 @@ describe('Trace', () => {
         keepAlive: jest.fn().mockResolvedValue({ getAccepted: () => true }),
         closeTrace: jest.fn().mockResolvedValue({ getAccepted: () => true }),
       }));
-      client = new Client('test-api-key', { plugins: [Web3Plugin()] });
+      client = new Client('mir_web_test-api-key', { plugins: [Web3Plugin()] });
     });
 
     // Use fake timers to prevent keep-alive intervals from causing test timeouts
@@ -1158,7 +1158,7 @@ describe('Trace', () => {
 
       it('frontend-owned trace keeps keepalive; backend fire-and-forget does not', async () => {
         // --- Frontend SDK instance: creates a new trace (is the owner) ---
-        const frontendClient = new Client('frontend-api-key');
+        const frontendClient = new Client('mir_web_frontend-api-key');
         const frontendTrace = frontendClient.trace({ name: 'UserSwap', includeUserMeta: false });
         frontendTrace.addAttribute('wallet', '0xabc');
         frontendTrace.flush();
@@ -1175,7 +1175,7 @@ describe('Trace', () => {
         expect(typeof frontendTraceId).toBe('string');
         expect(frontendTraceId.length).toBe(32);
 
-        const backendClient = new Client('backend-api-key');
+        const backendClient = new Client('mir_web_backend-api-key');
         const backendTrace = backendClient.trace({
           name: 'BackendTag',
           traceId: frontendTraceId,
@@ -1205,7 +1205,7 @@ describe('Trace', () => {
 
       it('backend fire-and-forget update does not require close() to clean up', async () => {
         // Simulate backend grabbing a frontend traceId to tag a single event
-        const backendClient = new Client('backend-api-key');
+        const backendClient = new Client('mir_web_backend-api-key');
         const backendTrace = backendClient.trace({
           traceId: 'frontend-trace-abc',
           includeUserMeta: false,
@@ -1234,7 +1234,7 @@ describe('Trace', () => {
 
       it('backend can opt into keepalive with autoKeepAlive: true if it takes ownership', async () => {
         // Edge case: backend explicitly wants keepalive (e.g., it becomes the new owner)
-        const backendClient = new Client('backend-api-key');
+        const backendClient = new Client('mir_web_backend-api-key');
         const backendTrace = backendClient.trace({
           traceId: 'frontend-trace-abc',
           autoKeepAlive: true,
@@ -1365,14 +1365,14 @@ describe('Trace', () => {
     });
 
     it('provider from ClientOptions flows to trace', async () => {
-      const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
+      const clientWithProvider = new Client('mir_web_test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
       const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
       expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
     });
 
     it('setProvider overrides plugin provider', async () => {
-      const clientWithProvider = new Client('test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
+      const clientWithProvider = new Client('mir_web_test-key', { plugins: [Web3Plugin({ provider: ethProvider })] });
       const trace = clientWithProvider.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
       expect(trace.web3.evm.getProviderChain()).toBe(Chain.Ethereum);
@@ -1383,7 +1383,7 @@ describe('Trace', () => {
     });
 
     it('setProvider overrides initial plugin provider', async () => {
-      const clientWithPoly = new Client('test-key', { plugins: [Web3Plugin({ provider: polygonProvider })] });
+      const clientWithPoly = new Client('mir_web_test-key', { plugins: [Web3Plugin({ provider: polygonProvider })] });
       const trace = clientWithPoly.trace({ name: 'TestTrace', includeUserMeta: false });
       await flushPromises();
       expect(trace.web3.evm.getProviderChain()).toBe(Chain.Polygon);
@@ -1789,7 +1789,7 @@ describe('MiradorProvider', () => {
       flushTrace: mockFlushTrace,
     }));
 
-    mockClient = new Client('test-api-key', { plugins: [Web3Plugin()] });
+    mockClient = new Client('mir_web_test-api-key', { plugins: [Web3Plugin()] });
 
     mockUnderlying = {
       request: jest.fn().mockImplementation(async (args) => {
