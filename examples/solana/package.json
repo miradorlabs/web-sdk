@@ -39,7 +39,10 @@
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
-    "express": "^4.22.1",
-    "http-proxy-middleware": "^3.0.3"
+    "express": "^4.22.3",
+    "http-proxy-middleware": "^3.0.7"
+  },
+  "overrides": {
+    "shell-quote": "1.11.0"
   }
 }
