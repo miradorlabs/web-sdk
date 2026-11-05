@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@miradorlabs/web-sdk": "file:../..",
-    "@solana/web3.js": "^1.95.0",
+    "@solana/web3.js": "^1.99.0",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
@@ -43,6 +43,9 @@
     "http-proxy-middleware": "^3.0.7"
   },
   "overrides": {
-    "shell-quote": "1.11.0"
+    "shell-quote": "1.11.0",
+    "@solana/web3.js": {
+      "jayson": "5.0.0"
+    }
   }
 }
