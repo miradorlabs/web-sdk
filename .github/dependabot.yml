@@ -23,6 +23,18 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # Example apps: security updates only (limit 0 disables version-update PRs)
+  - package-ecosystem: "npm"
+    directories:
+      - "/examples/default"
+      - "/examples/solana"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "fix(deps)"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
