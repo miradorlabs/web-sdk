@@ -6,7 +6,7 @@
 import { elements } from './src/state.js';
 import { GATEWAY_URL } from './src/config.js';
 import { log } from './src/utils.js';
-import { saveApiKey, changeApiKey, toggleApiKeyVisibility, loadSavedApiKey } from './src/api-key.js';
+import { saveApiKey, changeApiKey, toggleApiKeyVisibility, clearLegacySavedApiKey } from './src/api-key.js';
 import { connectWallet, disconnectWallet, getPhantomProvider } from './src/wallet.js';
 import { sendTransaction } from './src/transaction.js';
 import { addAttribute, addTag } from './src/form.js';
@@ -62,4 +62,4 @@ if (!getPhantomProvider()) {
   log('Phantom extension not detected. Install at https://phantom.com/ to use this demo.', 'warn');
 }
 
-loadSavedApiKey();
+clearLegacySavedApiKey();

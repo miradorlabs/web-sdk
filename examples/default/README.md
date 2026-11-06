@@ -67,7 +67,7 @@ npm run dev:no-proxy # Build and serve without proxy
 
 ### 1. Enter Your API Key
 
-Enter your Mirador API key to initialize the SDK. The key is saved to localStorage for convenience.
+Enter your Mirador API key to initialize the SDK. The key is kept in memory only, so you need to re-enter it after reloading the page.
 
 ### 2. Select and Connect Your Wallet
 
@@ -282,7 +282,7 @@ Get some testnet ETH from a faucet (links above).
 This can happen on congested networks. The demo will wait up to 2 minutes for confirmation.
 
 ### CORS Errors
-Make sure the proxy server is running (`npm run proxy`).
+Make sure the proxy server is running (`npm run proxy`). The proxy only accepts requests from `http://localhost:8000` and `http://127.0.0.1:8000`; if you serve the demo from another origin, set `ALLOWED_ORIGINS` (comma-separated) before starting it.
 
 ### Network Not Supported
 Switch to a supported network in your wallet. The demo will automatically detect the change.

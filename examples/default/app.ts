@@ -6,7 +6,7 @@
 import { elements } from './src/state.js';
 import { GATEWAY_URL } from './src/config.js';
 import { log } from './src/utils.js';
-import { saveApiKey, changeApiKey, toggleApiKeyVisibility, loadSavedApiKey } from './src/api-key.js';
+import { saveApiKey, changeApiKey, toggleApiKeyVisibility, clearLegacySavedApiKey } from './src/api-key.js';
 import { connectWallet, disconnectWallet, initWalletDiscovery, copyAddress } from './src/wallet.js';
 import { toggleNetworkDropdown, closeNetworkDropdown } from './src/network.js';
 import { sendTransaction, addAttribute, addTag, updatePreview } from './src/transaction.js';
@@ -83,5 +83,4 @@ fetch(`${GATEWAY_URL}/health`)
 // Initialize wallet discovery (EIP-6963)
 initWalletDiscovery();
 
-// Try to load saved API key
-loadSavedApiKey();
+clearLegacySavedApiKey();

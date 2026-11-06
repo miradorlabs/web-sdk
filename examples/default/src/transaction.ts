@@ -7,14 +7,6 @@ import { elements, walletState, traceState, miradorClient } from './state.js';
 import { log, showStatus, formatAddress, getNetworkInfo } from './utils.js';
 import { updateBalance } from './wallet.js';
 
-// Extend window for onclick handlers
-declare global {
-  interface Window {
-    removeAttribute: (key: string) => void;
-    removeTag: (index: number) => void;
-  }
-}
-
 // Provider error type
 interface ProviderRpcError extends Error {
   code: number;
@@ -328,13 +320,26 @@ export function updateAttributesDisplay(): void {
   for (const [key, value] of Object.entries(traceState.attributes)) {
     const row = document.createElement('div');
     row.className = 'attribute-row';
-    row.innerHTML = `
-      <span class="attribute-key">${key}</span>
-      <span class="attribute-value">${value}</span>
-      <span class="tag-remove" onclick="removeAttribute('${key}')">&times;</span>
-    `;
+    row.append(
+      createSpan('attribute-key', key),
+      createSpan('attribute-value', value),
+      createRemoveButton(() => removeAttribute(key)),
+    );
     list.appendChild(row);
   }
+}
+
+function createSpan(className: string, text: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = className;
+  span.textContent = text;
+  return span;
+}
+
+function createRemoveButton(onRemove: () => void): HTMLSpanElement {
+  const button = createSpan('tag-remove', '\u00d7');
+  button.addEventListener('click', onRemove);
+  return button;
 }
 
 export function removeAttribute(key: string): void {
@@ -374,7 +379,7 @@ export function updateTagsDisplay(): void {
   traceState.tags.forEach((tag, index) => {
     const tagEl = document.createElement('span');
     tagEl.className = 'tag';
-    tagEl.innerHTML = `${tag} <span class="tag-remove" onclick="removeTag(${index})">&times;</span>`;
+    tagEl.append(`${tag} `, createRemoveButton(() => removeTag(index)));
     container.appendChild(tagEl);
   });
 }
@@ -403,7 +408,3 @@ export function updatePreview(): void {
     elements.previewAmount.textContent = amount ? `${amount} ETH` : '-';
   }
 }
-
-// Expose to window for onclick handlers
-window.removeAttribute = removeAttribute;
-window.removeTag = removeTag;

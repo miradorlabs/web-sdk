@@ -15,7 +15,13 @@ export function log(message: string, type: LogType = 'info'): void {
   const time = new Date().toLocaleTimeString();
   const entry = document.createElement('div');
   entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${type}">${message}</span>`;
+  const timeEl = document.createElement('span');
+  timeEl.className = 'log-time';
+  timeEl.textContent = `[${time}]`;
+  const messageEl = document.createElement('span');
+  messageEl.className = `log-${type}`;
+  messageEl.textContent = message;
+  entry.append(timeEl, ' ', messageEl);
   if (elements.log) {
     elements.log.appendChild(entry);
     elements.log.scrollTop = elements.log.scrollHeight;
