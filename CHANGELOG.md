@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.6.1](https://github.com/miradorlabs/web-sdk/compare/v2.6.0...v2.6.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** drop vulnerable stream-json and uuid from solana example ([#121](https://github.com/miradorlabs/web-sdk/issues/121)) ([df84efd](https://github.com/miradorlabs/web-sdk/commit/df84efdea65a71b95d57451a298eb53b27d81394))
+* **deps:** patch vulnerable example dependencies ([#119](https://github.com/miradorlabs/web-sdk/issues/119)) ([bae828b](https://github.com/miradorlabs/web-sdk/commit/bae828b4bdb22aa59be724ec93c6eef5cf761fbd))
+* **deps:** patch vulnerable SDK toolchain dependencies ([#118](https://github.com/miradorlabs/web-sdk/issues/118)) ([22d4b7c](https://github.com/miradorlabs/web-sdk/commit/22d4b7ce3a8baee4a30f6455a7c66bee246c6672))
+* **deps:** resolve minimatch ReDoS alert in dev tooling ([#122](https://github.com/miradorlabs/web-sdk/issues/122)) ([431f96a](https://github.com/miradorlabs/web-sdk/commit/431f96a29c28be1ff00ae75ee4cacfaf95c453f9))
+* **security:** resolve open CodeQL alerts in examples and workflows ([#125](https://github.com/miradorlabs/web-sdk/issues/125)) ([f9e1257](https://github.com/miradorlabs/web-sdk/commit/f9e1257711f1d9ffc206cff18eaca3b4127fb9f4))
+
 ## [2.5.0](https://github.com/miradorlabs/web-sdk/compare/v2.4.1...v2.5.0) (2026-07-01)
 
 
