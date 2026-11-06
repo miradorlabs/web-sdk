@@ -13,7 +13,7 @@ import {
 import { GATEWAY_URL, SOLANA_RPC_URL } from './config.js';
 import { log } from './utils.js';
 
-const STORAGE_KEY = 'mirador.solana-demo.apiKey';
+const LEGACY_STORAGE_KEY = 'mirador.solana-demo.apiKey';
 
 export function saveApiKey(): void {
   const value = elements.apiKeyInput?.value.trim();
@@ -21,19 +21,18 @@ export function saveApiKey(): void {
     log('Enter an API key first.', 'warn');
     return;
   }
-  localStorage.setItem(STORAGE_KEY, value);
   initClientWithKey(value);
 }
 
-export function loadSavedApiKey(): void {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return;
-  if (elements.apiKeyInput) elements.apiKeyInput.value = stored;
-  initClientWithKey(stored);
+/**
+ * Earlier versions of this demo persisted the API key in localStorage in
+ * clear text. The key now lives only in memory; remove any leftover copy.
+ */
+export function clearLegacySavedApiKey(): void {
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 export function changeApiKey(): void {
-  localStorage.removeItem(STORAGE_KEY);
   setApiKey(null);
   setMiradorClient(null);
   if (elements.apiKeyInput) elements.apiKeyInput.value = '';

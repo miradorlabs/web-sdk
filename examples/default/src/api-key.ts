@@ -34,13 +34,6 @@ export function saveApiKey(): void {
 
   log(`API key configured (${key.slice(0, 4)}...${key.slice(-4)})`, 'success');
   showStatus('API key saved! Now connect your wallet.', 'success');
-
-  // Save to localStorage for convenience
-  try {
-    localStorage.setItem('mirador_api_key', key);
-  } catch {
-    // localStorage not available, ignore
-  }
 }
 
 export function changeApiKey(): void {
@@ -66,13 +59,6 @@ export function changeApiKey(): void {
   disconnectWallet();
 
   log('API key cleared', 'info');
-
-  // Clear from localStorage
-  try {
-    localStorage.removeItem('mirador_api_key');
-  } catch {
-    // localStorage not available, ignore
-  }
 }
 
 export function toggleApiKeyVisibility(): void {
@@ -87,14 +73,13 @@ export function toggleApiKeyVisibility(): void {
   }
 }
 
-export function loadSavedApiKey(): void {
+/**
+ * Earlier versions of this demo persisted the API key in localStorage in
+ * clear text. The key now lives only in memory; remove any leftover copy.
+ */
+export function clearLegacySavedApiKey(): void {
   try {
-    const savedKey = localStorage.getItem('mirador_api_key');
-    if (savedKey && elements.apiKeyInput) {
-      elements.apiKeyInput.value = savedKey;
-      saveApiKey();
-      log('Loaded saved API key', 'info');
-    }
+    localStorage.removeItem('mirador_api_key');
   } catch {
     // localStorage not available, ignore
   }

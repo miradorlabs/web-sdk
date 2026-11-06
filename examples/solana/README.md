@@ -99,6 +99,7 @@ Devnet keeps the demo free, fast, and safe — failed transactions cost no real 
 | ----- | --- |
 | "Phantom wallet not detected" | Install the [Phantom extension](https://phantom.com/) and refresh |
 | "Proxy server not running" | Run `npm run dev` (combined) or `npm run proxy` in a second terminal |
+| CORS errors from the proxy | The proxy only accepts `http://localhost:8001` and `http://127.0.0.1:8001`; set `ALLOWED_ORIGINS` (comma-separated) in `.env` to serve the demo elsewhere |
 | "Insufficient lamports for transaction" | Top up at [faucet.solana.com](https://faucet.solana.com/) |
 | Build errors after pulling | Re-run `cd ../.. && npm install && npm run build` to rebuild the parent SDK |
 
