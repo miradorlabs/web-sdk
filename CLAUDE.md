@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**SOC 2:** read [SOC2.md](SOC2.md) before changing access, secrets, data handling, logging, infrastructure, CI or releases. Never weaken a control it lists.
+
 ## Overview
 
 Browser SDK for the Mirador tracing platform using gRPC-Web to communicate with the Mirador Ingest Gateway API. Published as `@miradorlabs/web`.
